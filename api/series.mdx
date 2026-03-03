@@ -9,7 +9,7 @@ The Series API provides access to TV series content including browsing series, v
 
 Display a paginated listing of available TV series with optional category filtering.
 
-```
+```http
 GET /series
 ```
 
@@ -83,7 +83,7 @@ GET /series?as_of=2024-01-15T10:30:00&as_of_id=789
 
 Display detailed information about a specific series including all seasons and episodes.
 
-```
+```http
 GET /series/{model}
 ```
 
@@ -152,7 +152,7 @@ GET /series/67890
 
 Invalidate cached series information to force fresh data retrieval.
 
-```
+```http
 DELETE /series/{model}/cache
 ```
 
@@ -187,7 +187,7 @@ DELETE /series/67890/cache
 
 Add a series to the current user's watchlist.
 
-```
+```http
 POST /series/{model}/watchlist
 ```
 
@@ -229,7 +229,7 @@ POST /series/67890/watchlist
 
 Remove a series from the current user's watchlist.
 
-```
+```http
 DELETE /series/{model}/watchlist
 ```
 
@@ -271,7 +271,7 @@ DELETE /series/67890/watchlist
 
 Trigger a server-side download of a specific episode through Aria2.
 
-```
+```http
 GET /series/{model}/{season}/{episode}/download
 ```
 
@@ -340,7 +340,7 @@ GET /series/67890/1/5/download
 
 Trigger server-side downloads for multiple episodes at once.
 
-```
+```http
 POST /series/{model}/download
 ```
 
@@ -419,7 +419,7 @@ Content-Type: application/json
 
 Generate a signed direct download link for a single episode.
 
-```
+```http
 GET /series/{model}/{season}/{episode}/direct
 ```
 
@@ -481,7 +481,7 @@ GET /series/67890/1/5/direct
 
 Generate a text file containing direct download links for multiple episodes.
 
-```
+```http
 POST /series/{model}/direct.txt
 ```
 
@@ -524,7 +524,7 @@ Returns text file download.
 - `Content-Disposition: attachment; filename="direct-links.txt"`
 
 **Content Format:**
-```
+```text
 # Direct Download Links for Series, copy one by one or use a download manager
 https://signed-url-1
 https://signed-url-2
@@ -557,7 +557,7 @@ Content-Type: application/json
 
 Enable automated episode download monitoring for a series.
 
-```
+```http
 POST /series/{model}/monitoring
 ```
 
@@ -588,7 +588,7 @@ POST /series/67890/monitoring
 
 Update the monitoring configuration for a series.
 
-```
+```http
 PATCH /series/{model}/monitoring
 ```
 
@@ -619,7 +619,7 @@ PATCH /series/67890/monitoring
 
 Disable automated episode download monitoring for a series.
 
-```
+```http
 DELETE /series/{model}/monitoring
 ```
 
@@ -650,7 +650,7 @@ DELETE /series/67890/monitoring
 
 Manually trigger an immediate check for new episodes to download.
 
-```
+```http
 POST /series/{model}/monitoring/run-now
 ```
 
@@ -688,7 +688,7 @@ POST /series/67890/monitoring/run-now
 
 Download multiple past episodes that were released before monitoring started.
 
-```
+```http
 POST /series/{model}/monitoring/backfill
 ```
 

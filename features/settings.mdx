@@ -1,0 +1,295 @@
+---
+title: Settings & Administration
+description: Manage user accounts, configure services, and control application settings
+---
+
+The Settings section provides comprehensive control over your Lionz IPTV Downloader instance, including user management, service configuration, and personal preferences.
+
+## User Settings
+
+### Profile Management
+
+Manage your personal account information and preferences.
+
+**Route:** `GET /settings/profile`
+
+<Steps>
+  <Step title="Access Profile Settings">
+    Navigate to **Settings** → **Profile** from the user menu
+  </Step>
+  <Step title="Update Information">
+    Modify your name, email, or other profile details
+  </Step>
+  <Step title="Save Changes">
+    Click **Update Profile** to save your changes
+  </Step>
+</Steps>
+
+<ParamField path="name" type="string" required>
+  Your display name
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  Your email address (must be unique)
+</ParamField>
+
+### Password Management
+
+Change your account password securely.
+
+**Route:** `GET /settings/password`
+
+<Warning>
+Changing your password will invalidate all active sessions except your current one.
+</Warning>
+
+<Steps>
+  <Step title="Navigate to Password Settings">
+    Go to **Settings** → **Password**
+  </Step>
+  <Step title="Enter Current Password">
+    Provide your current password for verification
+  </Step>
+  <Step title="Set New Password">
+    Enter and confirm your new password
+  </Step>
+</Steps>
+
+### Appearance Settings
+
+Customize the application's visual theme.
+
+**Route:** `GET /settings/appearance`
+
+- **Theme**: Choose between light, dark, or system preference
+- **UI Customization**: Adjust interface preferences
+
+## Administrative Settings
+
+<Note>
+Administrative settings require **Admin** role. Some features require **Super Admin** privileges.
+</Note>
+
+### User Management
+
+Manage user accounts, roles, and permissions.
+
+**Route:** `GET /settings/users`
+
+**Required Permission:** Admin
+
+#### User Roles
+
+<ResponseField name="role" type="enum">
+  User role determining access level:
+  - `admin` - Full administrative access
+  - `member` - Standard user access
+</ResponseField>
+
+<ResponseField name="subtype" type="enum">
+  User subtype for additional classification:
+  - `internal` - Internal organization users
+  - `external` - External or guest users
+</ResponseField>
+
+#### User Operations
+
+**Update User Subtype**
+
+```
+PATCH /settings/users/{user}/subtype
+```
+
+Change a user's subtype (Internal/External).
+
+**Update User Role** (Super Admin only)
+
+```
+PATCH /settings/users/{user}/role
+```
+
+Promote or demote users between Member and Admin roles.
+
+**Transfer Super Admin** (Super Admin only)
+
+```
+PATCH /settings/users/{user}/super-admin
+```
+
+Transfer super admin privileges to another admin user.
+
+<Warning>
+Transferring super admin privileges will remove them from your account. This action cannot be undone.
+</Warning>
+
+### Xtream Codes Configuration
+
+Configure your connection to the Lionz IPTV service via Xtream Codes API.
+
+**Route:** `GET /settings/xtreamcodes`
+
+**Required Permission:** Admin
+
+<ParamField path="host" type="string" required>
+  Xtream Codes API host (without http://)
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  API port number (typically 80 or 443)
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  Your Xtream Codes username
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Your Xtream Codes password
+</ParamField>
+
+See [Xtream Codes Configuration](/config/xtream-codes) for detailed setup instructions.
+
+### Aria2 Configuration
+
+Configure aria2 download manager settings.
+
+**Route:** `GET /settings/aria2`
+
+**Required Permission:** Admin
+
+<ParamField path="host" type="string" required>
+  Aria2 RPC host (e.g., http://localhost)
+</ParamField>
+
+<ParamField path="port" type="integer" required>
+  Aria2 RPC port (default: 6800)
+</ParamField>
+
+<ParamField path="secret" type="string">
+  RPC secret token for authentication
+</ParamField>
+
+See [Aria2 Configuration](/config/aria2) for detailed setup instructions.
+
+### Media Sync Configuration
+
+Control automatic content synchronization from your IPTV provider.
+
+**Route:** `GET /settings/syncmedia`
+
+**Required Permission:** Admin
+
+Configure how frequently content metadata is refreshed:
+
+- **Sync Schedule**: How often to check for new content
+- **Batch Size**: Number of items to sync per batch
+- **Auto-sync**: Enable/disable automatic synchronization
+
+<Tip>
+Regular syncing ensures your library stays up-to-date with new releases and metadata changes from your IPTV provider.
+</Tip>
+
+### Category Sync
+
+Manage category synchronization from your IPTV provider.
+
+**Route:** `GET /settings/synccategories`
+
+**Required Permission:** Admin
+
+#### Configuration Options
+
+- **Sync VOD Categories**: Enable/disable VOD category updates
+- **Sync Series Categories**: Enable/disable TV series category updates
+- **Auto-create Categories**: Automatically create new categories when detected
+
+#### Sync History
+
+**Route:** `GET /settings/synccategories/history`
+
+View historical category synchronization runs:
+
+- Timestamp of sync operation
+- Number of categories added/updated/removed
+- Sync status and any errors
+- Duration of sync operation
+
+<Info>
+The sync history helps track changes to your category structure over time and diagnose any synchronization issues.
+</Info>
+
+## Schedule Management
+
+Manage automatic episode download schedules.
+
+**Route:** `GET /settings/schedules`
+
+### Bulk Operations
+
+**Bulk Apply Monitoring Preset**
+
+```
+PATCH /settings/schedules/bulk-apply
+```
+
+Apply monitoring settings to multiple series at once.
+
+**Pause All Schedules**
+
+```
+PATCH /settings/schedules/pause
+```
+
+Temporarily pause all automatic episode downloads.
+
+<Note>
+Schedule management requires the `auto-download-schedules` permission. See [Auto Episodes](/features/auto-episodes) for more details.
+</Note>
+
+## Permission System
+
+### Abilities
+
+The application uses Laravel's Gate system for authorization:
+
+- `server-download` - Permission to queue downloads on the server
+- `download-operations` - Permission to manage download operations (pause, cancel, retry)
+- `auto-download-schedules` - Permission to create and manage automatic episode schedules
+- `admin` - Full administrative access
+- `super-admin` - Super admin privileges (user management, config changes)
+
+### Access Control
+
+Routes are protected by middleware:
+
+```php
+Route::middleware('can:admin')           // Requires admin role
+Route::middleware('can:super-admin')     // Requires super admin
+Route::middleware('can:server-download') // Requires download permission
+```
+
+<Accordion title="How are permissions determined?">
+  Permissions are primarily role-based:
+  
+  - **Members** can download content and manage their own watchlist
+  - **Admins** can configure services and manage users (except super admin functions)
+  - **Super Admin** has all permissions including user role management
+  
+  Additional permissions like `auto-download-schedules` may be granted per user or role.
+</Accordion>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Updates" icon="rotate">
+    Keep service configurations up-to-date, especially after provider changes
+  </Card>
+  <Card title="User Management" icon="users">
+    Regularly review user accounts and remove inactive users
+  </Card>
+  <Card title="Sync Schedules" icon="calendar">
+    Configure sync schedules to balance freshness with server load
+  </Card>
+  <Card title="Backup Configs" icon="database">
+    Back up your configuration before making major changes
+  </Card>
+</CardGroup>

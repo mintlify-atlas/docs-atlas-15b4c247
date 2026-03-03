@@ -39,7 +39,8 @@
               "features/downloads",
               "features/watchlist",
               "features/search",
-              "features/auto-episodes"
+              "features/auto-episodes",
+              "features/settings"
             ]
           },
           {
@@ -89,7 +90,8 @@
               "api/models/series",
               "api/models/vod-stream",
               "api/models/media-download",
-              "api/models/watchlist"
+              "api/models/watchlist",
+              "api/models/category"
             ]
           },
           {

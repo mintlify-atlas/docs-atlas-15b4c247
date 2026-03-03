@@ -9,7 +9,7 @@ The Watchlist API allows users to manage their personal collection of movies and
 
 Display all items in the current user's watchlist with optional filtering by media type.
 
-```
+```http
 GET /watchlist
 ```
 
@@ -117,7 +117,7 @@ GET /watchlist?filter=series
 
 Add a movie or series to the current user's watchlist.
 
-```
+```http
 POST /watchlist
 ```
 
@@ -197,7 +197,7 @@ Content-Type: application/json
 
 Remove an item from the current user's watchlist.
 
-```
+```http
 DELETE /watchlist/{id}
 ```
 
@@ -252,12 +252,12 @@ In addition to the main watchlist controller, media-specific endpoints exist for
 ### Movie-Specific Endpoints
 
 **Add Movie:**
-```
+```http
 POST /movies/{model}/watchlist
 ```
 
 **Remove Movie:**
-```
+```http
 DELETE /movies/{model}/watchlist
 ```
 
@@ -270,12 +270,12 @@ See [Movies API - Watchlist](/api/movies#add-to-watchlist) for details.
 ### Series-Specific Endpoints
 
 **Add Series:**
-```
+```http
 POST /series/{model}/watchlist
 ```
 
 **Remove Series:**
-```
+```http
 DELETE /series/{model}/watchlist
 ```
 

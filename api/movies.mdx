@@ -9,7 +9,7 @@ The Movies API provides access to VOD (Video on Demand) content including browsi
 
 Display a paginated listing of available movies with optional category filtering.
 
-```
+```http
 GET /movies
 ```
 
@@ -83,7 +83,7 @@ GET /movies?as_of=2024-01-15T10:30:00&as_of_id=456
 
 Display detailed information about a specific movie.
 
-```
+```http
 GET /movies/{model}
 ```
 
@@ -129,7 +129,7 @@ GET /movies/12345
 
 Invalidate cached movie information to force fresh data retrieval.
 
-```
+```http
 DELETE /movies/{model}/cache
 ```
 
@@ -167,7 +167,7 @@ DELETE /movies/12345/cache
 
 Add a movie to the current user's watchlist.
 
-```
+```http
 POST /movies/{model}/watchlist
 ```
 
@@ -209,7 +209,7 @@ POST /movies/12345/watchlist
 
 Remove a movie from the current user's watchlist.
 
-```
+```http
 DELETE /movies/{model}/watchlist
 ```
 
@@ -252,7 +252,7 @@ DELETE /movies/12345/watchlist
 
 Trigger a server-side download of a movie through Aria2.
 
-```
+```http
 GET /movies/{model}/download
 ```
 
@@ -309,7 +309,7 @@ GET /movies/12345/download?return_to=/downloads
 
 Generate a signed direct download link for client-side downloading.
 
-```
+```http
 GET /movies/{model}/direct
 ```
 

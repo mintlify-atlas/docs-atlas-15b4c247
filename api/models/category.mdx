@@ -1,0 +1,213 @@
+---
+title: Category Model
+description: Category model for organizing VOD and Series content
+---
+
+The `Category` model represents content categories synced from your IPTV provider. Categories help organize movies and TV series for easier browsing.
+
+## Model Location
+
+```
+app/Models/Category.php
+```
+
+## Database Schema
+
+The categories table stores category information from your IPTV provider.
+
+<ResponseField name="id" type="integer">
+  Primary key
+</ResponseField>
+
+<ResponseField name="provider_id" type="string">
+  Unique identifier from the IPTV provider
+  - Must be unique across all categories
+  - Used for syncing with provider's category structure
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name of the category
+</ResponseField>
+
+<ResponseField name="in_vod" type="boolean">
+  Whether this category contains VOD/movie content
+  - Indexed for performance
+  - Used to filter categories in movie browsing
+</ResponseField>
+
+<ResponseField name="in_series" type="boolean">
+  Whether this category contains TV series content
+  - Indexed for performance
+  - Used to filter categories in series browsing
+</ResponseField>
+
+<ResponseField name="is_system" type="boolean">
+  Whether this is a system-managed category
+  - System categories cannot be deleted
+  - Includes "Uncategorized" categories
+</ResponseField>
+
+<ResponseField name="created_at" type="timestamp">
+  When the category was first created
+</ResponseField>
+
+<ResponseField name="updated_at" type="timestamp">
+  When the category was last updated
+</ResponseField>
+
+## Fillable Attributes
+
+```php
+protected $fillable = [
+    'provider_id',
+    'name',
+    'in_vod',
+    'in_series',
+    'is_system',
+];
+```
+
+## Type Casts
+
+```php
+protected function casts(): array
+{
+    return [
+        'in_vod' => 'boolean',
+        'in_series' => 'boolean',
+        'is_system' => 'boolean',
+    ];
+}
+```
+
+## System Categories
+
+Two special system categories are created automatically:
+
+### Uncategorized VOD
+
+```php
+Category::UNCATEGORIZED_VOD_PROVIDER_ID = '__uncategorized_vod__'
+```
+
+- **Provider ID:** `__uncategorized_vod__`
+- **Name:** Uncategorized
+- **In VOD:** `true`
+- **In Series:** `false`
+- **Is System:** `true`
+
+Used for movies that don't have a category assigned by the provider.
+
+### Uncategorized Series
+
+```php
+Category::UNCATEGORIZED_SERIES_PROVIDER_ID = '__uncategorized_series__'
+```
+
+- **Provider ID:** `__uncategorized_series__`
+- **Name:** Uncategorized
+- **In VOD:** `false`
+- **In Series:** `true`
+- **Is System:** `true`
+
+Used for TV series that don't have a category assigned by the provider.
+
+## Usage Examples
+
+### Query VOD Categories
+
+```php
+use App\Models\Category;
+
+// Get all VOD categories
+$vodCategories = Category::where('in_vod', true)->get();
+
+// Get non-system VOD categories
+$userCategories = Category::where('in_vod', true)
+    ->where('is_system', false)
+    ->get();
+```
+
+### Query Series Categories
+
+```php
+// Get all series categories
+$seriesCategories = Category::where('in_series', true)->get();
+
+// Find category by provider ID
+$category = Category::where('provider_id', 'action-123')->first();
+```
+
+### Check System Categories
+
+```php
+// Get uncategorized VOD category
+$uncategorizedVod = Category::where(
+    'provider_id',
+    Category::UNCATEGORIZED_VOD_PROVIDER_ID
+)->first();
+
+// Check if category is system-managed
+if ($category->is_system) {
+    // Cannot delete system categories
+}
+```
+
+## Database Indexes
+
+The categories table has indexes on:
+
+- `provider_id` (unique) - Fast lookups by provider identifier
+- `in_vod` - Efficient filtering of VOD categories
+- `in_series` - Efficient filtering of series categories
+
+## Relationships
+
+Categories are referenced by VOD streams and Series through the `category_provider_id` field, but do not have explicit Eloquent relationships defined. The relationship is maintained at the application level through provider IDs.
+
+## Synchronization
+
+Categories are synced from your IPTV provider using the `SyncCategories` action:
+
+```php
+use App\Actions\SyncCategories;
+
+// Trigger category sync
+$result = app(SyncCategories::class)->handle();
+```
+
+See [Sync Media Action](/api/actions/sync-media) for more details on synchronization.
+
+## Category Sync Process
+
+<Steps>
+  <Step title="Fetch Categories">
+    Retrieve categories from Xtream Codes API
+  </Step>
+  <Step title="Update or Create">
+    For each category, update existing or create new records
+  </Step>
+  <Step title="Preserve System Categories">
+    System categories are never deleted, even if removed from provider
+  </Step>
+  <Step title="Update Timestamps">
+    Track when categories were last synced
+  </Step>
+</Steps>
+
+<Note>
+Categories are separate for VOD and Series content. A category can exist in both (e.g., "Action" movies and "Action" TV shows) or be specific to one content type.
+</Note>
+
+## Validation Rules
+
+When creating or updating categories:
+
+- `provider_id` must be unique
+- `name` is required
+- `in_vod` and `in_series` cannot both be false
+- System categories (`is_system = true`) cannot be deleted
+
+<Warning>
+Never manually delete system categories. They are required for proper functioning of the uncategorized content feature.
+</Warning>

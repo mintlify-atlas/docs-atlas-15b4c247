@@ -12,7 +12,7 @@ The application uses Laravel's built-in session-based authentication with email 
 Users authenticate through the standard Laravel authentication flow.
 
 **Login Page:**
-```
+```http
 GET /login
 ```
 
@@ -25,7 +25,7 @@ Renders the login form with session status and available options.
 - `error` - Any authentication errors
 
 **Login Request:**
-```
+```http
 POST /login
 ```
 
@@ -39,7 +39,7 @@ Authenticates the user and creates a session.
 ### Logout
 
 **Endpoint:**
-```
+```http
 POST /logout
 ```
 

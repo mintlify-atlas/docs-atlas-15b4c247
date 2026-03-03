@@ -9,7 +9,7 @@ The Downloads API manages server-side media downloads through Aria2, including s
 
 Display a paginated list of media downloads for the current user (or all users if admin).
 
-```
+```http
 GET /downloads
 ```
 
@@ -97,7 +97,7 @@ GET /downloads?owners=1,3,5
 
 Perform an action on a download (pause, resume, retry, cancel, remove).
 
-```
+```http
 PATCH /downloads/{model}
 ```
 
@@ -225,7 +225,7 @@ Content-Type: application/json
 
 Cancel a download (shorthand for PATCH with cancel action).
 
-```
+```http
 DELETE /downloads/{model}
 ```
 
