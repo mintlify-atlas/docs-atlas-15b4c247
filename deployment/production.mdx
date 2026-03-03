@@ -1,0 +1,492 @@
+---
+title: Production Deployment
+description: Best practices and optimization for deploying Lionz IPTV Downloader to production
+---
+
+This guide covers production-specific configurations, security hardening, and performance optimization for Lionz IPTV Downloader.
+
+## Pre-Deployment Checklist
+
+Before deploying to production, ensure you have:
+
+- [ ] Generated a secure `APP_KEY`
+- [ ] Set `APP_DEBUG=false`
+- [ ] Configured proper database backups
+- [ ] Set up external Aria2 and Meilisearch services
+- [ ] Reviewed security settings
+- [ ] Configured HTTPS/TLS certificates
+- [ ] Set up monitoring and logging
+
+## Environment Configuration
+
+### Required Settings
+
+Update your `.env` file with production values:
+
+```bash
+# Application
+APP_NAME="Lionz IPTV Downloader"
+APP_ENV=production
+APP_KEY=base64:GENERATE_WITH_php_artisan_key_generate
+APP_DEBUG=false
+APP_URL=https://your-domain.com
+
+# Security
+SYNC_MEDIA_MEMORY_LIMIT=512M
+
+# Logging
+LOG_CHANNEL=stack
+LOG_LEVEL=warning
+
+# Database (using Docker volume)
+DB_CONNECTION=sqlite
+DB_DATABASE=/data/database/database.sqlite
+
+# Queue
+QUEUE_CONNECTION=database
+
+# Cache (use Redis in production for better performance)
+CACHE_STORE=redis
+REDIS_HOST=your-redis-host
+REDIS_PASSWORD=your-secure-password
+REDIS_PORT=6379
+
+# Session
+SESSION_DRIVER=redis
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=true
+
+# Meilisearch
+SCOUT_DRIVER=meilisearch
+SCOUT_QUEUE=true
+MEILISEARCH_HOST=http://your-meilisearch-host:7700
+MEILISEARCH_KEY=your-master-key
+
+# Aria2
+ARIA2_RPC_HOST=http://your-aria2-host:6800
+
+# Features
+TELESCOPE_ENABLED=false
+FEATURE_DIRECT_DOWNLOAD_LINKS=true
+
+# HTTP Client
+HTTP_CLIENT_USER_AGENT="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0"
+```
+
+### Generate Application Key
+
+The `APP_KEY` is critical for encryption. Generate it before first deployment:
+
+```bash
+# If deploying with Docker
+docker-compose exec application php artisan key:generate
+
+# Or locally
+php artisan key:generate
+```
+
+## Build Optimization
+
+### Frontend Build
+
+The Dockerfile builds the frontend assets during image creation (docker/Dockerfile:3-13):
+
+```dockerfile
+FROM oven/bun:1-alpine as frontend
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY ./ /app/
+RUN bun run build
+```
+
+**Build scripts** (package.json:5-6):
+
+```json
+{
+  "scripts": {
+    "build": "vite build",
+    "build:ssr": "vite build && vite build --ssr"
+  }
+}
+```
+
+For production with SSR support:
+
+```bash
+bun run build:ssr
+```
+
+### Backend Optimization
+
+The Docker build includes production optimizations (docker/Dockerfile:70):
+
+```bash
+composer install --no-scripts --optimize-autoloader --no-dev --no-cache
+```
+
+**Flags explained:**
+- `--optimize-autoloader` - Generates optimized class maps
+- `--no-dev` - Excludes development dependencies
+- `--no-cache` - Reduces image size
+
+## PHP Configuration
+
+Production PHP settings are configured in the Dockerfile (docker/Dockerfile:38-43):
+
+```ini
+expose_php = Off
+upload_max_filesize = 600M
+post_max_size = 0
+max_execution_time = 120
+max_input_time = 60
+memory_limit = 1024M
+zend.exception_ignore_args = Off
+```
+
+**Installed extensions for performance:**
+- `opcache` - Bytecode caching for faster execution
+- `apcu` - In-memory user data cache
+- `redis` - Fast session and cache storage
+- `zstd` - Modern compression algorithm
+
+## Caching Strategy
+
+### Application Caching
+
+The entrypoint script (docker/entrypoint.sh:38-41) automatically caches:
+
+```bash
+php artisan config:cache   # Configuration files
+php artisan route:cache    # Route definitions
+php artisan view:cache     # Blade templates
+php artisan event:cache    # Event listeners
+```
+
+**When to clear caches:**
+
+```bash
+# After code changes
+docker-compose exec application php artisan cache:clear
+docker-compose exec application php artisan config:clear
+docker-compose exec application php artisan route:clear
+docker-compose exec application php artisan view:clear
+
+# Then re-cache
+docker-compose restart application
+```
+
+### Redis Configuration
+
+For high-traffic deployments, use Redis instead of database caching:
+
+<Steps>
+  <Step title="Deploy Redis">
+    Add Redis to your docker-compose.yml:
+
+    ```yaml
+    redis:
+      image: redis:7-alpine
+      restart: always
+      ports:
+        - '6379:6379'
+      volumes:
+        - redis_data:/data
+      command: redis-server --appendonly yes
+    ```
+  </Step>
+
+  <Step title="Update environment">
+    Configure Laravel to use Redis:
+
+    ```bash
+    CACHE_STORE=redis
+    SESSION_DRIVER=redis
+    REDIS_HOST=redis
+    REDIS_PASSWORD=null
+    REDIS_PORT=6379
+    ```
+  </Step>
+
+  <Step title="Update service configuration">
+    Add Redis dependency to application service:
+
+    ```yaml
+    application:
+      depends_on:
+        - queue
+        - scheduler
+        - redis
+    ```
+  </Step>
+</Steps>
+
+## Queue Worker Optimization
+
+The queue worker (docker/Dockerfile:105) runs with production settings:
+
+```bash
+php artisan queue:work \
+  --memory=2048 \
+  --timeout=0 \
+  --tries=3 \
+  --no-interaction
+```
+
+**Parameter explanations:**
+- `--memory=2048` - Restart worker after 2GB memory usage
+- `--timeout=0` - No timeout (downloads can be long-running)
+- `--tries=3` - Retry failed jobs 3 times
+
+### Scaling Queue Workers
+
+For high-volume downloads, scale the queue service:
+
+```bash
+docker-compose up -d --scale queue=3
+```
+
+This runs 3 parallel queue workers.
+
+## Security Hardening
+
+### Disable Debug Mode
+
+Ensure debug mode is disabled (exposes sensitive information):
+
+```bash
+APP_DEBUG=false
+LOG_LEVEL=warning
+```
+
+### Hide PHP Version
+
+The Dockerfile already sets (docker/Dockerfile:38):
+
+```ini
+expose_php = Off
+```
+
+### Secure Session Configuration
+
+```bash
+SESSION_DRIVER=redis
+SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true
+SESSION_SAME_SITE=lax
+```
+
+### Disable Telescope in Production
+
+Telescope can expose sensitive data:
+
+```bash
+TELESCOPE_ENABLED=false
+```
+
+## HTTPS/TLS Configuration
+
+### Enable HTTPS Ports
+
+Uncomment in docker-compose.yml:46-47:
+
+```yaml
+ports:
+  - '8000:80'
+  - "443:443"      # HTTPS
+  - "443:443/udp"  # HTTP/3
+```
+
+### Configure Caddy for TLS
+
+Update `docker/Caddyfile` for automatic HTTPS:
+
+```caddyfile
+{
+	frankenphp
+	order php_server before file_server
+}
+
+your-domain.com {
+	route {
+		root * public/
+		encode zstd br gzip
+		php_server {
+			index index.php
+			try_files {path} index.php
+			resolve_root_symlink
+		}
+	}
+}
+```
+
+Caddy automatically obtains and renews Let's Encrypt certificates.
+
+## Database Backups
+
+Since the application uses SQLite, implement regular backups:
+
+### Automated Backup Script
+
+```bash
+#!/bin/bash
+# backup.sh
+
+BACKUP_DIR="/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_PATH="./data/database/database.sqlite"
+
+mkdir -p $BACKUP_DIR
+cp $DB_PATH "$BACKUP_DIR/database_$DATE.sqlite"
+
+# Keep only last 7 days
+find $BACKUP_DIR -name "database_*.sqlite" -mtime +7 -delete
+```
+
+### Backup with Docker
+
+```bash
+# Manual backup
+docker-compose exec application sqlite3 /data/database/database.sqlite ".backup '/data/database/backup.sqlite'"
+
+# Copy to host
+docker cp $(docker-compose ps -q application):/data/database/backup.sqlite ./backup_$(date +%Y%m%d).sqlite
+```
+
+## Monitoring and Health Checks
+
+### Application Health Check
+
+The Dockerfile includes a health check (docker/Dockerfile:111):
+
+```dockerfile
+HEALTHCHECK --interval=10m --timeout=30s --start-period=10s --retries=5 \
+  CMD [ "curl", "-f", "http://localhost/up" ]
+```
+
+Access the health endpoint:
+
+```bash
+curl http://localhost:8000/up
+```
+
+### Monitor Container Status
+
+```bash
+# Check container health
+docker-compose ps
+
+# Monitor resource usage
+docker stats
+
+# View recent logs
+docker-compose logs --tail=100 -f
+```
+
+### Laravel Pulse (Optional)
+
+Enable Laravel Pulse for application monitoring:
+
+```bash
+php artisan pulse:check
+```
+
+Access dashboard at `/pulse` (configure authentication first).
+
+## Performance Benchmarks
+
+### Expected Performance
+
+With FrankenPHP and Laravel Octane (docker/Dockerfile:112):
+
+- **Concurrent requests**: 100+ req/sec
+- **Response time**: Less than 50ms for cached routes
+- **Memory usage**: ~200-300MB per service
+- **Queue throughput**: Depends on download speeds
+
+### Load Testing
+
+Use Laravel's built-in tools:
+
+```bash
+# Install development dependencies first
+composer require laravel/boost --dev
+
+php artisan boost:bench
+```
+
+## Deployment Strategies
+
+### Zero-Downtime Updates
+
+<Steps>
+  <Step title="Build new images">
+    ```bash
+    docker-compose build
+    ```
+  </Step>
+
+  <Step title="Update application first">
+    ```bash
+    docker-compose up -d --no-deps application
+    ```
+  </Step>
+
+  <Step title="Restart queue workers">
+    ```bash
+    docker-compose exec queue php artisan queue:restart
+    docker-compose up -d --no-deps queue
+    ```
+  </Step>
+
+  <Step title="Update scheduler">
+    ```bash
+    docker-compose up -d --no-deps scheduler
+    ```
+  </Step>
+</Steps>
+
+### Rollback Procedure
+
+```bash
+# Tag current deployment
+docker tag lionz-application:latest lionz-application:backup
+
+# If issues occur, rollback
+docker tag lionz-application:backup lionz-application:latest
+docker-compose up -d --force-recreate
+```
+
+## Scaling Considerations
+
+### Horizontal Scaling
+
+For multiple servers, consider:
+
+1. **Shared database**: Migrate from SQLite to PostgreSQL/MySQL
+2. **Shared storage**: Use S3 or NFS for media files
+3. **Load balancer**: Distribute traffic across application instances
+4. **Centralized queue**: Use Redis queue driver instead of database
+
+### Vertical Scaling
+
+Adjust resource limits in docker-compose.yml:
+
+```yaml
+application:
+  deploy:
+    resources:
+      limits:
+        cpus: '2'
+        memory: 2G
+      reservations:
+        cpus: '1'
+        memory: 1G
+```
+
+## Next Steps
+
+- Review [Docker Deployment](/deployment/docker) for container details
+- Check [Troubleshooting](/deployment/troubleshooting) for common issues
+- Set up monitoring with Laravel Pulse or external tools
+- Configure automated backups and disaster recovery

@@ -1,0 +1,333 @@
+---
+title: Docker Deployment
+description: Deploy Lionz IPTV Downloader using Docker and docker-compose
+---
+
+Lionz IPTV Downloader is designed to run efficiently in Docker containers using a multi-service architecture. The application uses FrankenPHP with Laravel Octane for high-performance request handling.
+
+## Architecture Overview
+
+The Docker deployment consists of three services:
+
+- **Application**: Web server running on FrankenPHP with Laravel Octane
+- **Queue**: Background job processor for download tasks
+- **Scheduler**: Laravel task scheduler for automated operations
+
+All services share a common SQLite database and communicate with external services (Aria2, Meilisearch) via host networking.
+
+## Prerequisites
+
+Before deploying, ensure you have:
+
+- Docker Engine 20.10+
+- Docker Compose v2.0+
+- Aria2 RPC server running on the host
+- Meilisearch server running on the host (port 7700)
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/shekohex/lionz.git
+    cd lionz
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Copy the example environment file and configure it:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Edit `.env` and set the required variables:
+
+    ```bash
+    APP_NAME="Lionz IPTV Downloader"
+    APP_ENV=production
+    APP_KEY=  # Generate with: php artisan key:generate
+    APP_DEBUG=false
+    APP_URL=http://localhost:8000
+
+    # Database (handled by Docker volume)
+    DB_CONNECTION=sqlite
+
+    # Meilisearch configuration
+    SCOUT_DRIVER=meilisearch
+    MEILISEARCH_HOST=http://host.docker.internal:7700
+    MEILISEARCH_KEY=
+
+    # Feature flags
+    TELESCOPE_ENABLED=false
+    FEATURE_DIRECT_DOWNLOAD_LINKS=true
+    ```
+  </Step>
+
+  <Step title="Build and start containers">
+    Build the Docker images and start all services:
+
+    ```bash
+    docker-compose up -d --build
+    ```
+
+    This will:
+    - Build the frontend assets using Bun
+    - Create optimized PHP 8.4 containers with all required extensions
+    - Start all three services (application, queue, scheduler)
+  </Step>
+
+  <Step title="Verify deployment">
+    Check that all containers are running:
+
+    ```bash
+    docker-compose ps
+    ```
+
+    Access the application at `http://localhost:8000`
+  </Step>
+</Steps>
+
+## Service Configuration
+
+### Application Service
+
+The main web application runs on port 8000:
+
+```yaml
+application:
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: app
+  ports:
+    - '8000:80'  # HTTP
+  volumes:
+    - ./data/database:/data/database
+    - caddy_data:/data
+    - caddy_config:/config
+```
+
+**Key features:**
+- Runs FrankenPHP with Laravel Octane for high performance
+- Includes health check endpoint at `/up`
+- Automatic cache optimization on startup
+- Supports HTTP/2 and compression (zstd, brotli, gzip)
+
+### Queue Service
+
+Processes background jobs for downloads:
+
+```yaml
+queue:
+  build:
+    target: queue
+  environment:
+    - DB_DATABASE=/data/database/database.sqlite
+  volumes:
+    - ./data/database:/data/database
+```
+
+**Configuration:**
+- Memory limit: 2048MB
+- Timeout: Unlimited (long-running downloads)
+- Retry attempts: 3
+- Auto-restart on failure
+
+### Scheduler Service
+
+Runs periodic tasks:
+
+```yaml
+scheduler:
+  build:
+    target: scheduler
+  volumes:
+    - ./data/database:/data/database
+```
+
+**Responsibilities:**
+- Media synchronization
+- Cleanup tasks
+- Index maintenance
+
+## Environment Variables
+
+All services share these environment variables (from docker-compose.yml:11-13):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_DATABASE` | `/data/database/database.sqlite` | SQLite database path |
+| `ARIA2_RPC_HOST` | `http://host.docker.internal` | Aria2 RPC endpoint |
+| `MEILISEARCH_HOST` | `http://host.docker.internal:7700` | Meilisearch server |
+
+Additional variables from `.env` file:
+
+| Variable | Description |
+|----------|-------------|
+| `APP_KEY` | Laravel application encryption key |
+| `SYNC_MEDIA_MEMORY_LIMIT` | Memory limit for media sync (default: 512M) |
+| `HTTP_CLIENT_USER_AGENT` | User agent for HTTP requests |
+| `FEATURE_DIRECT_DOWNLOAD_LINKS` | Enable direct download links |
+
+## Volume Management
+
+The deployment uses persistent volumes:
+
+```yaml
+volumes:
+  caddy_data:    # Caddy data storage
+  caddy_config:  # Caddy configuration
+```
+
+**Database volume:**
+```yaml
+volumes:
+  - ./data/database:/data/database
+```
+
+The SQLite database is stored in `./data/database/database.sqlite` and shared across all services.
+
+## HTTPS Configuration
+
+To enable HTTPS, uncomment the HTTPS ports in docker-compose.yml:46-47:
+
+```yaml
+ports:
+  - '8000:80'   # HTTP
+  - "443:443"   # HTTPS
+  - "443:443/udp"  # HTTP/3
+```
+
+Update your Caddyfile at `docker/Caddyfile` to configure TLS certificates.
+
+## Startup Process
+
+When containers start, the entrypoint script (docker/entrypoint.sh:1) performs:
+
+<Steps>
+  <Step title="Database initialization">
+    Creates SQLite database if it doesn't exist
+  </Step>
+
+  <Step title="Run migrations">
+    Applies database schema changes
+    ```bash
+    php artisan migrate --force --graceful
+    ```
+  </Step>
+
+  <Step title="Configure application">
+    Runs custom configuration command
+    ```bash
+    php artisan lionz:configure
+    ```
+  </Step>
+
+  <Step title="Optimize for production">
+    Caches configuration, routes, views, and events
+    ```bash
+    php artisan config:cache
+    php artisan route:cache
+    php artisan view:cache
+    php artisan event:cache
+    ```
+  </Step>
+
+  <Step title="Link storage">
+    Creates symbolic link for public storage
+    ```bash
+    php artisan storage:link --force
+    ```
+  </Step>
+
+  <Step title="Sync search indexes">
+    Updates Meilisearch index settings
+    ```bash
+    php artisan scout:sync-index-settings
+    ```
+  </Step>
+</Steps>
+
+## Managing Containers
+
+### View logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f application
+docker-compose logs -f queue
+docker-compose logs -f scheduler
+```
+
+### Restart services
+
+```bash
+# All services
+docker-compose restart
+
+# Specific service
+docker-compose restart application
+```
+
+### Stop and remove containers
+
+```bash
+docker-compose down
+
+# Remove volumes as well
+docker-compose down -v
+```
+
+### Update deployment
+
+```bash
+# Pull latest code
+git pull
+
+# Rebuild and restart
+docker-compose up -d --build
+```
+
+## Running Artisan Commands
+
+Execute Laravel Artisan commands inside containers:
+
+```bash
+# Inside application container
+docker-compose exec application php artisan migrate
+docker-compose exec application php artisan cache:clear
+docker-compose exec application php artisan queue:restart
+
+# Create a user
+docker-compose exec application php artisan tinker
+```
+
+## Performance Tuning
+
+The Dockerfile (docker/Dockerfile:38-43) includes optimized PHP settings:
+
+```ini
+upload_max_filesize = 600M
+post_max_size = 0
+max_execution_time = 120
+max_input_time = 60
+memory_limit = 1024M
+```
+
+**Installed PHP extensions** (docker/Dockerfile:19-35):
+- `opcache` - Bytecode caching
+- `apcu` - User cache
+- `redis` - Session/cache driver
+- `memcached` - Alternative cache driver
+- `imagick` - Image processing
+- `zstd` - Compression
+
+## Next Steps
+
+- Review [Production Deployment](/deployment/production) for optimization tips
+- Check [Troubleshooting](/deployment/troubleshooting) for common issues
+- Configure monitoring and logging for production use

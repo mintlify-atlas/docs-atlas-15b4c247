@@ -1,0 +1,467 @@
+---
+title: Testing
+description: Running tests with Pest, test structure, and testing best practices
+---
+
+## Overview
+
+Lionz IPTV Downloader uses [Pest PHP](https://pestphp.com/) for testing. Pest is a modern testing framework built on top of PHPUnit with an elegant, expressive syntax.
+
+## Running Tests
+
+### All Tests
+
+```bash
+vendor/bin/pest
+```
+
+### Specific Test Suites
+
+The project has three test suites defined in `phpunit.xml`:
+
+```bash
+# Feature tests (integration/functional tests)
+vendor/bin/pest --testsuite=Feature
+
+# Unit tests (isolated component tests)
+vendor/bin/pest --testsuite=Unit
+
+# Architecture tests (enforce coding standards)
+vendor/bin/pest --testsuite=Architecture
+```
+
+### Specific Test Files
+
+```bash
+vendor/bin/pest tests/Feature/Downloads/DownloadRetryPolicyTest.php
+vendor/bin/pest tests/Unit/Actions/AutoEpisodes/ComputeNextRunAtTest.php
+```
+
+### Filter by Test Name
+
+```bash
+vendor/bin/pest --filter="retry"
+vendor/bin/pest --filter="schedules retry for transient"
+```
+
+### With Coverage
+
+```bash
+vendor/bin/pest --coverage
+```
+
+### Parallel Execution
+
+```bash
+vendor/bin/pest --parallel
+```
+
+## Test Structure
+
+### Directory Organization
+
+```
+tests/
+├── Architecture/          # Architecture tests
+│   └── GeneralTest.php   # PHP/Laravel preset rules
+├── Browser/              # Browser tests (Playwright)
+│   └── HomepageTest.php
+├── Feature/              # Integration/feature tests
+│   ├── AccessControl/   # Authorization tests
+│   ├── Actions/         # Action class tests
+│   ├── AutoEpisodes/    # Auto-episode feature tests
+│   ├── Controllers/     # Controller tests
+│   ├── Discovery/       # Content discovery tests
+│   ├── Downloads/       # Download lifecycle tests
+│   ├── Jobs/            # Queue job tests
+│   └── Settings/        # Settings feature tests
+├── Unit/                # Unit tests
+│   └── Actions/
+│       └── AutoEpisodes/
+├── Pest.php             # Pest configuration
+└── TestCase.php         # Base test case
+```
+
+### Test Configuration
+
+Pest is configured in `tests/Pest.php`:
+
+```php
+pest()->extend(TestCase::class)->in('Feature', 'Unit', 'Browser');
+pest()->browser()->inChrome()->inLightMode();
+```
+
+This:
+- Extends Laravel's `TestCase` for all test directories
+- Configures browser tests to use Chrome in light mode
+
+### PHPUnit Configuration
+
+The `phpunit.xml` file defines:
+
+**Test Environment:**
+```xml
+<env name="APP_ENV" value="testing"/>
+<env name="DB_CONNECTION" value="sqlite"/>
+<env name="DB_DATABASE" value=":memory:"/>
+<env name="CACHE_STORE" value="array"/>
+<env name="QUEUE_CONNECTION" value="sync"/>
+<env name="SESSION_DRIVER" value="array"/>
+<env name="TELESCOPE_ENABLED" value="false"/>
+<env name="PULSE_ENABLED" value="false"/>
+```
+
+Tests run with:
+- In-memory SQLite database
+- Array cache driver
+- Synchronous queue
+- Disabled monitoring tools
+
+## Writing Tests
+
+### Basic Pest Syntax
+
+Pest uses a functional, expressive syntax:
+
+```php
+test('example', function (): void {
+    expect(true)->toBeTrue();
+});
+
+it('can do something', function (): void {
+    $result = doSomething();
+    
+    expect($result)->toBe('expected');
+});
+```
+
+### Feature Test Example
+
+From `tests/Feature/Downloads/DownloadRetryPolicyTest.php:42-94`:
+
+```php
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
+
+afterEach(function (): void {
+    Carbon::setTestNow();
+});
+
+it('schedules retry for transient monitor failures using deterministic backoff', function (): void {
+    Carbon::setTestNow('2026-02-26 12:00:00');
+    Queue::fake();
+
+    $owner = User::factory()->memberInternal()->create();
+    createRetryPolicyVodStream(streamId: 7101, name: 'Retry Movie 7101');
+
+    $download = MediaDownloadRef::query()->create([
+        'gid' => 'retry-monitor-transient-gid',
+        'media_id' => 7101,
+        'media_type' => VodStream::class,
+        'downloadable_id' => 7101,
+        'user_id' => $owner->id,
+        'retry_attempt' => 0,
+    ]);
+
+    // Mock aria2 response
+    bindRetryPolicyAria2Mock(new MockClient([
+        JsonRpcBatchRequest::class => MockResponse::make([...])
+    ]));
+
+    app(MonitorDownloads::class)->handle(app(JsonRpcConnector::class));
+
+    $download->refresh();
+    $expectedBackoff = ComputeRetryBackoff::run(1);
+
+    expect($download->retry_attempt)->toBe(1);
+    expect($download->retry_next_at)->not->toBeNull();
+    expect((int) now()->diffInSeconds($download->retry_next_at))->toBe($expectedBackoff);
+
+    Queue::assertPushed(RetryDownloadJob::class, function (RetryDownloadJob $job) use ($download): bool {
+        return $job->downloadRefId === $download->id
+            && $job->delay instanceof \DateTimeInterface
+            && Carbon::instance($job->delay)->equalTo($download->retry_next_at);
+    });
+});
+```
+
+Key patterns:
+- `uses(RefreshDatabase::class)` for database isolation
+- `afterEach()` for cleanup
+- Helper functions for test setup
+- Saloon `MockClient` for API mocking
+- `Queue::fake()` and `Queue::assertPushed()` for queue testing
+
+### Architecture Tests
+
+From `tests/Architecture/GeneralTest.php`:
+
+```php
+arch()->preset()->php();
+arch()->preset()->security();
+arch()->preset()->laravel()
+    ->ignoring('App\\Http\\Integrations')
+    ->ignoring('App\\Http\\Controllers\\VodStream\\VodStreamDownloadController')
+    ->ignoring('App\\Http\\Controllers\\Series\\SeriesDownloadController');
+```
+
+This enforces:
+- PHP best practices (no `eval`, `die`, etc.)
+- Security rules (no debug functions in production)
+- Laravel conventions (controllers don't use models directly, etc.)
+- With exceptions for API integration classes
+
+### Browser Tests
+
+The project uses Pest Browser (Playwright) for E2E tests:
+
+```bash
+# Prepare browser environment
+composer test:browser
+```
+
+This:
+1. Sets up Playwright Chromium executable
+2. Runs tests in `tests/Browser/`
+
+Browser tests use:
+```php
+pest()->browser()->inChrome()->inLightMode();
+```
+
+## Testing Best Practices
+
+### 1. Database Testing
+
+Always use `RefreshDatabase` trait:
+
+```php
+uses(RefreshDatabase::class);
+```
+
+This ensures a clean database for each test.
+
+### 2. Mocking External Services
+
+**Saloon HTTP Mocking:**
+
+```php
+use Saloon\Http\Faking\MockClient;
+use Saloon\Http\Faking\MockResponse;
+
+$mockClient = new MockClient([
+    GetVodInfoRequest::class => MockResponse::make([
+        'info' => [...],
+        'movie_data' => [...]
+    ]),
+]);
+
+app()->bind(XtreamCodesConnector::class, 
+    fn () => (new XtreamCodesConnector($config))->withMockClient($mockClient)
+);
+```
+
+**Queue Mocking:**
+
+```php
+use Illuminate\Support\Facades\Queue;
+
+Queue::fake();
+
+// Run code that dispatches jobs
+
+Queue::assertPushed(MyJob::class);
+Queue::assertPushed(MyJob::class, function ($job) {
+    return $job->someProperty === 'expected';
+});
+```
+
+### 3. Time Testing
+
+```php
+use Illuminate\Support\Carbon;
+
+Carbon::setTestNow('2026-02-26 12:00:00');
+
+// Test time-dependent logic
+
+// Cleanup in afterEach
+afterEach(function (): void {
+    Carbon::setTestNow();
+});
+```
+
+### 4. Helper Functions
+
+Create test helper functions at the bottom of test files:
+
+```php
+function createRetryPolicyVodStream(int $streamId, string $name): VodStream
+{
+    DB::table('vod_streams')->insert([...]);
+    return VodStream::query()->findOrFail($streamId);
+}
+```
+
+### 5. Test Isolation
+
+Each test should be independent:
+
+```php
+afterEach(function (): void {
+    // Clean up after each test
+    Carbon::setTestNow();
+    File::cleanDirectory($tempDir);
+});
+```
+
+### 6. Expectations
+
+Pest provides expressive expectations:
+
+```php
+expect($value)->toBe('exact');
+expect($value)->toEqual($other);  // Loose comparison
+expect($value)->toBeTrue();
+expect($value)->toBeFalse();
+expect($value)->toBeNull();
+expect($value)->not->toBeNull();
+expect($array)->toHaveKey('key');
+expect($array)->toHaveKeys(['key1', 'key2']);
+expect($count)->toBeGreaterThan(5);
+expect($string)->toContain('substring');
+```
+
+### 7. HTTP Testing
+
+```php
+$response = $this->actingAs($user)
+    ->get(route('downloads'));
+
+$response->assertOk();
+$response->assertStatus(200);
+$response->assertRedirect();
+$response->assertSessionHas('success');
+$response->assertSessionHasErrors(['field']);
+```
+
+**Inertia Testing:**
+
+```php
+$response = $this->actingAs($user)
+    ->withHeaders(['X-Inertia' => 'true'])
+    ->get(route('downloads'));
+
+$response->assertOk();
+$response->assertHeader('X-Inertia', 'true');
+$payload = $response->json('props.downloads.data');
+expect($payload)->toBeArray();
+```
+
+## Continuous Integration
+
+GitHub Actions runs tests automatically on push/PR.
+
+From `.github/workflows/tests.yml:47-48`:
+
+```yaml
+- name: Tests
+  run: ./vendor/bin/pest
+```
+
+The CI workflow:
+1. Checks out code
+2. Sets up PHP 8.4 with Xdebug
+3. Sets up Bun
+4. Installs frontend dependencies
+5. Builds assets
+6. Installs Composer dependencies
+7. Configures Laravel
+8. Runs Pest tests
+
+## Test Coverage
+
+Generate coverage report:
+
+```bash
+vendor/bin/pest --coverage
+```
+
+With minimum threshold:
+
+```bash
+vendor/bin/pest --coverage --min=80
+```
+
+HTML coverage report:
+
+```bash
+vendor/bin/pest --coverage-html coverage
+```
+
+Then open `coverage/index.html` in a browser.
+
+## Common Test Patterns
+
+### Testing Actions
+
+```php
+it('downloads media using aria2', function (): void {
+    $mockClient = new MockClient([...]);
+    
+    app()->bind(JsonRpcConnector::class, 
+        fn () => (new JsonRpcConnector($config))->withMockClient($mockClient)
+    );
+    
+    $gid = DownloadMedia::run($url, $options);
+    
+    expect($gid)->toBeString();
+    $mockClient->assertSent(AddUriRequest::class);
+});
+```
+
+### Testing Jobs
+
+```php
+it('monitors downloads and updates status', function (): void {
+    $download = MediaDownloadRef::factory()->create();
+    
+    // Mock dependencies
+    
+    app(MonitorDownloads::class)->handle($connector);
+    
+    $download->refresh();
+    expect($download->status)->toBe('completed');
+});
+```
+
+### Testing Controllers
+
+```php
+it('creates a download', function (): void {
+    $user = User::factory()->create();
+    $stream = VodStream::factory()->create();
+    
+    $response = $this->actingAs($user)
+        ->post(route('downloads.store'), [
+            'stream_id' => $stream->stream_id,
+        ]);
+    
+    $response->assertRedirect();
+    $this->assertDatabaseHas('media_download_refs', [
+        'media_id' => $stream->stream_id,
+        'user_id' => $user->id,
+    ]);
+});
+```
+
+## Tips
+
+- Run tests frequently during development
+- Write tests before fixing bugs (TDD)
+- Keep tests fast by mocking external services
+- Use descriptive test names that explain intent
+- Group related assertions in a single test
+- Use `dd()` or `dump()` for debugging tests
+- Check test output for helpful error messages

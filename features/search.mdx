@@ -1,0 +1,258 @@
+---
+title: Search
+description: Find movies and series quickly with MeiliSearch-powered full-text search
+---
+
+Lionz IPTV Downloader uses **MeiliSearch** to provide fast, typo-tolerant search across your entire media library. Search for movies and TV series by title, cast, director, genre, or plot description.
+
+## Accessing Search
+
+There are two search interfaces available:
+
+### Lightweight Search
+
+Quick search for immediate results:
+
+- Accessible from the navigation bar or header
+- POST request to `/search` endpoint
+- Optimized for speed with minimal metadata
+- Perfect for quick lookups
+
+### Full Search Page
+
+Comprehensive search with filtering:
+
+- Navigate to the dedicated Search page
+- GET request to `/search` endpoint
+- Advanced filtering and sorting options
+- Paginated results with full metadata
+
+## Search Query
+
+Enter your search terms in the search box:
+
+- **Partial Matches**: Search works with incomplete words
+- **Typo Tolerance**: Handles spelling mistakes automatically
+- **Multi-word Queries**: Search multiple terms at once
+- **Natural Language**: Type naturally, no special syntax required
+
+<Info>
+MeiliSearch's typo tolerance means you can find content even if you misspell the title or actor name.
+</Info>
+
+## Search Results
+
+Search returns two separate result sets:
+
+### Movies Results
+
+Searches across VOD content:
+
+- **Searchable Fields**: Movie titles
+- **Display**: Title, cover art, rating, release date
+- **Actions**: View details, download, add to watchlist
+
+### Series Results
+
+Searches across TV series:
+
+- **Searchable Fields**: Title, plot, cast, director, genre
+- **Display**: Series title, cover, rating, metadata
+- **Actions**: View details, browse episodes, add to watchlist
+
+<Card title="Rich Series Search" icon="magnifying-glass">
+Series search includes more fields than movies, allowing you to find shows by cast members, directors, genres, or plot keywords.
+</Card>
+
+## Filtering Results
+
+Refine your search with media type filters:
+
+### Filter by Media Type
+
+- **All** (default): Shows both movies and series
+- **Movies Only**: Displays only movie results
+- **Series Only**: Displays only TV series results
+
+Select a filter to update results instantly without a new search.
+
+### Combined Results
+
+When viewing "All" results:
+
+- Movies and series appear in separate sections
+- Each section shows its own pagination
+- Results are balanced between both types
+- Default: up to 50% of results from each type
+
+## Sorting Options
+
+Control the order of search results:
+
+- **Relevance** (default): MeiliSearch's ranking algorithm
+- **Date Added**: Newest content first (for movies)
+- **Rating**: Highest rated content first
+- **Title**: Alphabetical order
+
+<Tip>
+Relevance sorting uses MeiliSearch's advanced ranking rules, considering exact matches, word proximity, and field importance.
+</Tip>
+
+## Pagination
+
+Search results are paginated for performance:
+
+- **Default Page Size**: Varies by filter (10-20 items)
+- **Adjustable**: Change items per page via query parameters
+- **Independent Paging**: Movies and series paginate separately when viewing "All"
+- **URL Preservation**: Page state is maintained in the URL
+
+### Dynamic Page Limits
+
+When filtering by media type:
+
+- **Single Type**: Full page limit (e.g., 20 items)
+- **Both Types**: Split limit between movies and series (e.g., 10 each)
+
+<Steps>
+  <Step title="Enter Search Query">
+    Type your search term in the search box (movie title, actor, genre, etc.)
+  </Step>
+  <Step title="Review Results">
+    See matching movies and series with cover art and metadata
+  </Step>
+  <Step title="Apply Filters">
+    Narrow results to movies or series only, or adjust sorting
+  </Step>
+  <Step title="Take Action">
+    Click any result to view details, start downloads, or add to watchlist
+  </Step>
+</Steps>
+
+## Search Without Query
+
+Accessing the search page without a query:
+
+- Empty search box is displayed
+- No results shown
+- Ready for you to enter a search term
+- Filters are available but inactive
+
+## Search Performance
+
+MeiliSearch provides exceptional performance:
+
+- **Sub-millisecond Response**: Results appear almost instantly
+- **Indexed Fields**: Pre-indexed for fast retrieval
+- **Scalable**: Handles large media libraries efficiently
+- **Resource Efficient**: Optimized memory and CPU usage
+
+## Searchable Fields by Type
+
+### Movies (VOD Streams)
+
+Indexed fields:
+- `name`: Movie title
+
+### Series
+
+Indexed fields:
+- `name`: Series title
+- `plot`: Description and synopsis
+- `cast`: Actor names
+- `director`: Director names  
+- `genre`: Genre classifications
+
+<Note>
+Movies have fewer searchable fields compared to series. This is reflected in the source code's `toSearchableArray()` methods.
+</Note>
+
+## Search Actions
+
+From search results, you can:
+
+### Quick Actions
+
+- **View Details**: Click any result to see full information
+- **Download**: Initiate downloads directly from results
+- **Add to Watchlist**: Bookmark content for later
+- **Check Status**: See if already in watchlist
+
+### Navigation
+
+- **Browse Categories**: Jump to category view from results
+- **Series Episodes**: Access episode list from series results
+- **Related Content**: Discover similar titles
+
+## Integration with Scout
+
+Search is powered by Laravel Scout:
+
+- **Model Integration**: VodStream and Series models are searchable
+- **Auto Indexing**: New content is automatically indexed
+- **Sync Commands**: Manual re-indexing available if needed
+- **Queue Support**: Indexing can be queued for large updates
+
+<Card title="MeiliSearch Features" icon="sparkles">
+MeiliSearch provides:
+- Instant search results (< 50ms response times)
+- Typo tolerance with smart corrections
+- Prefix searching (matches partial words)
+- Synonym support and custom ranking rules
+</Card>
+
+## Advanced Search Tips
+
+### Finding Specific Content
+
+**By Actor**: Type the actor's name to find their movies and shows
+```
+Tom Hanks
+```
+
+**By Genre**: Search for genre keywords
+```
+Action Comedy
+```
+
+**By Plot**: Use keywords from the plot description
+```
+time travel adventure
+```
+
+**Exact Titles**: Type the full title for exact matches
+```
+The Matrix
+```
+
+### Combining Search with Filters
+
+1. Perform a broad search (e.g., "comedy")
+2. Filter to "Movies Only" or "Series Only"
+3. Sort by rating to find the best content
+4. Paginate through results
+
+## Empty Results
+
+If your search returns no results:
+
+- Check for typos (though MeiliSearch handles most)
+- Try broader search terms
+- Remove filters to expand results
+- Verify content exists in your library
+- Check if MeiliSearch index is up to date
+
+<Tip>
+If you're not finding expected content, administrators can re-index the search database using Scout artisan commands.
+</Tip>
+
+## Technical Implementation
+
+Search is implemented using:
+
+- **SearchController**: Handles full search page requests
+- **LightweightSearchController**: Handles quick search requests
+- **SearchMovies Action**: Executes movie searches with filters
+- **SearchSeries Action**: Executes series searches with filters
+- **Pipeline Pattern**: Applies filters and pagination sequentially
+- **MeiliSearch Driver**: Scout driver for search backend

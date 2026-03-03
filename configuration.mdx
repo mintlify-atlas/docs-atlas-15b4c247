@@ -1,0 +1,527 @@
+---
+title: Configuration
+description: Configure Lionz IPTV Downloader environment variables, service connections, and initial setup
+---
+
+This guide covers all configuration options for Lionz IPTV Downloader, including environment variables, service setup, and application initialization.
+
+## Environment Configuration
+
+All configuration is managed through the `.env` file in your project root. Start by copying the example file:
+
+```bash
+cp .env.example .env
+```
+
+### Application Settings
+
+<ParamField path="APP_NAME" type="string" default="Laravel">
+  The name of your application, displayed in the UI and emails.
+  ```ini
+  APP_NAME="Lionz IPTV Downloader"
+  ```
+</ParamField>
+
+<ParamField path="APP_ENV" type="string" default="local">
+  Application environment. Use `local` for development, `production` for live deployments.
+  ```ini
+  APP_ENV=local
+  ```
+</ParamField>
+
+<ParamField path="APP_KEY" type="string" required>
+  Application encryption key. Generated automatically by `php artisan key:generate`.
+  ```ini
+  APP_KEY=base64:your-generated-key-here
+  ```
+</ParamField>
+
+<ParamField path="APP_DEBUG" type="boolean" default="true">
+  Enable debug mode for detailed error messages. Set to `false` in production.
+  ```ini
+  APP_DEBUG=true
+  ```
+</ParamField>
+
+<ParamField path="APP_URL" type="string" default="http://localhost">
+  The base URL of your application.
+  ```ini
+  APP_URL=http://localhost:8000
+  ```
+</ParamField>
+
+<ParamField path="SYNC_MEDIA_MEMORY_LIMIT" type="string" default="512M">
+  Memory limit for media synchronization jobs. Increase if syncing large catalogs.
+  ```ini
+  SYNC_MEDIA_MEMORY_LIMIT=512M
+  ```
+</ParamField>
+
+### Lionz TV / Xtream Codes API
+
+<Warning>
+  These credentials are required for the application to function. Obtain them from your Lionz TV subscription.
+</Warning>
+
+Configure your Xtream Codes API credentials to connect to Lionz TV:
+
+<CodeGroup>
+```ini .env
+# Lionz IPTV Service Credentials
+XTREAM_CODES_API_HOST=your-host.lionz.tv
+XTREAM_CODES_API_PORT=80
+XTREAM_CODES_API_USER=your-username
+XTREAM_CODES_API_PASS=your-password
+```
+
+```php config/services.php
+'xtream' => [
+    'host' => env('XTREAM_CODES_API_HOST', 'http://api.xtream-codes.com'),
+    'port' => env('XTREAM_CODES_API_PORT', 80),
+    'username' => env('XTREAM_CODES_API_USER', 'example'),
+    'password' => env('XTREAM_CODES_API_PASS', 'password'),
+    'user_agent' => env('HTTP_CLIENT_USER_AGENT', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0"'),
+],
+```
+</CodeGroup>
+
+<ParamField path="XTREAM_CODES_API_HOST" type="string" required>
+  Your Lionz TV API host URL (without http:// or https://).
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_PORT" type="integer" default="80">
+  API port number. Typically `80` for HTTP or `443` for HTTPS.
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_USER" type="string" required>
+  Your Lionz TV username.
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_PASS" type="string" required>
+  Your Lionz TV password.
+</ParamField>
+
+<ParamField path="HTTP_CLIENT_USER_AGENT" type="string">
+  Custom user agent for API requests. Defaults to Firefox user agent.
+  ```ini
+  HTTP_CLIENT_USER_AGENT="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0"
+  ```
+</ParamField>
+
+### MeiliSearch Configuration
+
+<Note>
+  MeiliSearch must be running before starting the application or syncing content.
+</Note>
+
+Configure MeiliSearch for fast content search and indexing:
+
+<CodeGroup>
+```ini .env
+# MeiliSearch Configuration
+SCOUT_DRIVER=meilisearch
+SCOUT_QUEUE=true
+MEILISEARCH_HOST=http://localhost:7700
+MEILISEARCH_KEY=your-master-key
+```
+
+```bash Start MeiliSearch
+meilisearch --master-key=your-master-key
+```
+</CodeGroup>
+
+<ParamField path="SCOUT_DRIVER" type="string" default="meilisearch">
+  Laravel Scout driver. Must be `meilisearch`.
+</ParamField>
+
+<ParamField path="SCOUT_QUEUE" type="boolean" default="true">
+  Whether to queue search indexing operations. Recommended to keep `true` for better performance.
+</ParamField>
+
+<ParamField path="MEILISEARCH_HOST" type="string" required>
+  MeiliSearch server URL with port.
+  ```ini
+  MEILISEARCH_HOST=http://localhost:7700
+  ```
+</ParamField>
+
+<ParamField path="MEILISEARCH_KEY" type="string" required>
+  MeiliSearch master key for authentication. Must match the key used when starting MeiliSearch.
+</ParamField>
+
+### aria2 Download Manager
+
+<Tip>
+  For desktop use, we recommend [Motrix](https://motrix.app/) which provides a GUI for aria2 with RPC enabled.
+</Tip>
+
+Configure aria2 for handling downloads:
+
+<CodeGroup>
+```ini .env
+# Aria2 Configuration
+ARIA2_RPC_HOST=http://localhost
+ARIA2_RPC_PORT=6800
+ARIA2_RPC_SECRET=your-secret-token
+ARIA2_DOWNLOAD_ROOT=/path/to/downloads
+```
+
+```php config/services.php
+'aria2' => [
+    'host' => env('ARIA2_RPC_HOST', 'http://localhost'),
+    'port' => env('ARIA2_RPC_PORT', 6800),
+    'secret' => env('ARIA2_RPC_SECRET', null),
+    'download_root' => env('ARIA2_DOWNLOAD_ROOT', storage_path('app/public/downloads')),
+],
+```
+
+```bash Start aria2 RPC
+aria2c --enable-rpc \
+       --rpc-listen-all=true \
+       --rpc-secret=your-secret-token \
+       --dir=/path/to/downloads
+```
+</CodeGroup>
+
+<ParamField path="ARIA2_RPC_HOST" type="string" default="http://localhost">
+  aria2 RPC server hostname with protocol.
+</ParamField>
+
+<ParamField path="ARIA2_RPC_PORT" type="integer" default="6800">
+  aria2 RPC server port.
+</ParamField>
+
+<ParamField path="ARIA2_RPC_SECRET" type="string">
+  Secret token for aria2 RPC authentication. Must match the `--rpc-secret` used when starting aria2.
+</ParamField>
+
+<ParamField path="ARIA2_DOWNLOAD_ROOT" type="string">
+  Root directory for downloads. Defaults to `storage/app/public/downloads`.
+  ```ini
+  ARIA2_DOWNLOAD_ROOT=/home/user/Downloads/Lionz
+  ```
+</ParamField>
+
+### Database Configuration
+
+<Note>
+  SQLite is the default and recommended database for ease of setup. You can switch to MySQL or PostgreSQL if needed.
+</Note>
+
+<CodeGroup>
+```ini SQLite (Default)
+DB_CONNECTION=sqlite
+# No additional configuration needed
+# Database file: database/database.sqlite
+```
+
+```ini MySQL
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=lionz
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+```ini PostgreSQL
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=lionz
+DB_USERNAME=postgres
+DB_PASSWORD=
+```
+</CodeGroup>
+
+### Queue Configuration
+
+<ParamField path="QUEUE_CONNECTION" type="string" default="database">
+  Queue driver for background jobs. Default `database` works well for most use cases.
+  ```ini
+  QUEUE_CONNECTION=database
+  ```
+</ParamField>
+
+<Note>
+  Background jobs are used for media synchronization, search indexing, and download monitoring. The queue worker is automatically started with `composer dev`.
+</Note>
+
+### Optional Features
+
+<ParamField path="TELESCOPE_ENABLED" type="boolean" default="true">
+  Enable Laravel Telescope debug assistant. Set to `false` in production.
+  ```ini
+  TELESCOPE_ENABLED=true
+  ```
+</ParamField>
+
+<ParamField path="FEATURE_DIRECT_DOWNLOAD_LINKS" type="boolean" default="true">
+  Enable direct download links feature for content.
+  ```ini
+  FEATURE_DIRECT_DOWNLOAD_LINKS=true
+  ```
+</ParamField>
+
+## Service Initialization
+
+After configuring your `.env` file, initialize the application configuration:
+
+<Steps>
+  <Step title="Initialize Configurations">
+    Store aria2 and Xtream Codes configurations from `.env` into the database:
+
+    ```bash
+    php artisan lionz:configure
+    ```
+
+    This command reads from your environment variables and creates database records:
+
+    <CodeGroup>
+    ```php app/Console/Commands/InitializeConfigurationsCommand.php
+    /**
+     * Initialize application configurations in the database
+     */
+    public function handle(
+        Aria2Config $aria2Config,
+        XtreamCodesConfig $xtreamCodesConfig
+    ): int {
+        $this->initializeAria2($aria2Config);
+        $this->initializeXtreamCodes($xtreamCodesConfig);
+        $this->info('All configurations initialized successfully!');
+
+        return Command::SUCCESS;
+    }
+    ```
+
+    ```php app/Models/Aria2Config.php
+    /**
+     * Get Aria2 configuration based on environment variables.
+     */
+    public static function fromEnv(): self
+    {
+        return new self(
+            self::envAttributes()
+        );
+    }
+
+    private static function envAttributes(): array
+    {
+        return [
+            'host' => config('services.aria2.host'),
+            'port' => config('services.aria2.port'),
+            'secret' => config('services.aria2.secret'),
+            'use_ssl' => false,
+        ];
+    }
+    ```
+    </CodeGroup>
+
+    <Note>
+      This only needs to be run once after initial setup or when updating service credentials.
+    </Note>
+  </Step>
+
+  <Step title="Sync Media Content">
+    Perform the initial content synchronization:
+
+    ```bash
+    php artisan lionz:sync-media
+    ```
+
+    This command:
+    - Fetches all categories from Lionz TV via Xtream Codes API
+    - Syncs VOD and Series content to the local database
+    - Indexes all content in MeiliSearch for fast searching
+
+    <CodeGroup>
+    ```php app/Console/Commands/SyncMediaCommand.php
+    /**
+     * Sync media content from Xtream Codes API
+     */
+    public function handle(SyncMediaAction $syncMedia): int
+    {
+        $this->info('Starting media synchronization...');
+
+        try {
+            $this->info('Running SyncMedia action...');
+            $syncMedia->run();
+            $this->info('Media synchronization completed successfully!');
+
+            return Command::SUCCESS;
+        } catch (Exception $exception) {
+            $this->error('Media synchronization failed: '.$exception->getMessage());
+            Log::error($exception->getMessage(), ['exception' => $exception]);
+
+            return Command::FAILURE;
+        }
+    }
+    ```
+
+    ```php app/Jobs/RefreshMediaContents.php
+    /**
+     * Execute the job.
+     */
+    public function handle(): void
+    {
+        $this->applyMemoryLimit();
+
+        SyncMedia::run();
+    }
+
+    private function applyMemoryLimit(): void
+    {
+        $memoryLimit = (string) config('app.sync_media_memory_limit');
+
+        if ($memoryLimit !== '') {
+            ini_set('memory_limit', $memoryLimit);
+        }
+    }
+    ```
+    </CodeGroup>
+
+    <Warning>
+      The first sync may take several minutes depending on catalog size. Ensure MeiliSearch is running before executing.
+    </Warning>
+  </Step>
+
+  <Step title="Verify Configuration">
+    Test your configuration by accessing the application:
+
+    ```bash
+    composer dev
+    ```
+
+    Then open `http://localhost:8000` in your browser. You should see:
+    - Recently added movies and series
+    - Working search functionality
+    - Ability to browse content
+  </Step>
+</Steps>
+
+## Running the Application
+
+### Development Mode
+
+Start all development services:
+
+```bash
+composer dev
+```
+
+This concurrently runs:
+- **Laravel server** on `http://localhost:8000`
+- **Queue worker** for background jobs
+- **Log watcher** (Pail) for real-time logs
+- **Vite dev server** for hot module reloading
+
+<CodeGroup>
+```json composer.json
+"scripts": {
+    "dev": [
+        "Composer\\Config::disableProcessTimeout",
+        "bunx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"bun run dev\" --names=server,queue,logs,vite"
+    ]
+}
+```
+
+```bash Individual Services
+# Terminal 1: Laravel server
+php artisan serve
+
+# Terminal 2: Queue worker
+php artisan queue:listen
+
+# Terminal 3: Logs
+php artisan pail
+
+# Terminal 4: Vite
+pnpm run dev
+```
+</CodeGroup>
+
+### Development with SSR
+
+For server-side rendering support:
+
+```bash
+composer dev:ssr
+```
+
+### Production Mode
+
+<Steps>
+  <Step title="Build Frontend Assets">
+    ```bash
+    pnpm run build
+    ```
+  </Step>
+
+  <Step title="Optimize Laravel">
+    ```bash
+    php artisan config:cache
+    php artisan route:cache
+    php artisan view:cache
+    composer install --optimize-autoloader --no-dev
+    ```
+  </Step>
+
+  <Step title="Start Queue Worker">
+    ```bash
+    php artisan queue:work --daemon
+    ```
+  </Step>
+
+  <Step title="Serve with Octane (Optional)">
+    ```bash
+    php artisan octane:start --server=swoole --host=0.0.0.0 --port=8000
+    ```
+  </Step>
+</Steps>
+
+## Scheduled Tasks
+
+For automated content syncing, add to your crontab:
+
+```bash crontab
+# Sync media content every 6 hours
+0 */6 * * * cd /path/to/lionzhd && php artisan lionz:sync-media >> /dev/null 2>&1
+
+# Monitor series for new episodes every hour
+0 * * * * cd /path/to/lionzhd && php artisan schedule:run >> /dev/null 2>&1
+```
+
+## Configuration Summary
+
+<Check>
+  **Essential Configuration Checklist**
+  - [ ] `.env` file created from `.env.example`
+  - [ ] `APP_KEY` generated
+  - [ ] Xtream Codes API credentials configured
+  - [ ] MeiliSearch installed and running
+  - [ ] aria2 installed and RPC enabled
+  - [ ] Database created and migrated
+  - [ ] `php artisan lionz:configure` executed
+  - [ ] `php artisan lionz:sync-media` completed
+  - [ ] Application accessible at `http://localhost:8000`
+</Check>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage Guide" icon="book" href="/usage">
+    Learn how to search, download, and manage your IPTV content
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Explore the Xtream Codes API integration
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting">
+    Common configuration issues and solutions
+  </Card>
+  
+  <Card title="Advanced Features" icon="star" href="/advanced">
+    Series monitoring, bulk downloads, and automation
+  </Card>
+</CardGroup>

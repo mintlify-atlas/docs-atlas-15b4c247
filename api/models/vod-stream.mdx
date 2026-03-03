@@ -1,0 +1,151 @@
+---
+title: VodStream Model
+description: VodStream model schema and methods for managing video-on-demand content
+---
+
+## Overview
+
+The `VodStream` model represents video-on-demand (VOD) content in the application. It uses Laravel Scout for search functionality and integrates with Spatie Laravel Data.
+
+**Model Path:** `app/Models/VodStream.php`  
+**Table:** `vod_streams`  
+**Primary Key:** `stream_id` (non-incrementing)
+
+## Database Schema
+
+<ResponseField name="stream_id" type="integer" required>
+  Primary key for the VOD stream
+</ResponseField>
+
+<ResponseField name="num" type="integer" required>
+  Unique stream number
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the VOD content
+</ResponseField>
+
+<ResponseField name="stream_type" type="string" required>
+  Type of the stream
+</ResponseField>
+
+<ResponseField name="stream_icon" type="string">
+  URL to the stream icon/thumbnail
+</ResponseField>
+
+<ResponseField name="rating" type="string">
+  Rating value
+</ResponseField>
+
+<ResponseField name="rating_5based" type="decimal" default="0">
+  Rating on a 5-point scale (precision: 3,1)
+</ResponseField>
+
+<ResponseField name="added" type="datetime" required>
+  Timestamp when the stream was added (immutable)
+</ResponseField>
+
+<ResponseField name="is_adult" type="boolean" default="false">
+  Whether the content is adult/mature content
+</ResponseField>
+
+<ResponseField name="category_id" type="string">
+  Category identifier
+</ResponseField>
+
+<ResponseField name="container_extension" type="string" required>
+  File container extension (e.g., 'mp4', 'mkv')
+</ResponseField>
+
+<ResponseField name="custom_sid" type="string">
+  Custom stream identifier
+</ResponseField>
+
+<ResponseField name="direct_source" type="string">
+  Direct source URL or reference
+</ResponseField>
+
+<ResponseField name="created_at" type="timestamp">
+  Record creation timestamp
+</ResponseField>
+
+<ResponseField name="updated_at" type="timestamp">
+  Record last update timestamp
+</ResponseField>
+
+## Fillable Attributes
+
+The following fields are mass assignable:
+
+```php
+[
+    'name',
+    'stream_type',
+    'stream_id',
+    'stream_icon',
+    'rating',
+    'rating_5based',
+    'added',
+    'is_adult',
+    'category_id',
+    'container_extension',
+    'custom_sid',
+    'direct_source',
+]
+```
+
+## Type Casts
+
+The model casts the following attributes:
+
+- `stream_id` → `integer`
+- `rating_5based` → `decimal:1`
+- `is_adult` → `boolean`
+- `added` → `immutable_datetime`
+
+## Relationships
+
+### Watchlists
+
+Polymorphic one-to-many relationship with the Watchlist model.
+
+```php
+public function watchlists(): MorphMany
+```
+
+Returns all watchlist entries for this VOD stream.
+
+**Usage:**
+```php
+$vod = VodStream::find(123);
+$watchlists = $vod->watchlists;
+```
+
+## Search
+
+The VodStream model uses Laravel Scout for full-text search. Only the `name` field is indexed.
+
+**Example:**
+```php
+$results = VodStream::search('Inception')->get();
+```
+
+## Data Transfer Object
+
+The model integrates with `VodStreamData` DTO class:
+
+```php
+protected $dataClass = VodStreamData::class;
+```
+
+## Adult Content Filtering
+
+Use the `is_adult` flag to filter mature content:
+
+```php
+// Get non-adult content only
+$familyFriendly = VodStream::where('is_adult', false)->get();
+
+// Get adult content
+$matureContent = VodStream::where('is_adult', true)->get();
+```

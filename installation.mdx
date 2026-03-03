@@ -1,0 +1,425 @@
+---
+title: Installation
+description: Detailed installation instructions for Lionz IPTV Downloader with all prerequisites and setup steps
+---
+
+This guide provides comprehensive installation instructions for Lionz IPTV Downloader, including all prerequisites and optional components.
+
+## Prerequisites
+
+Before installing Lionz IPTV Downloader, ensure you have the following components installed on your system.
+
+### Required Software
+
+<AccordionGroup>
+  <Accordion title="PHP 8.4 or Higher" icon="php">
+    Lionz IPTV Downloader requires PHP 8.4 or higher with the following extensions:
+    - `php-sqlite3` - SQLite database support
+    - `php-curl` - HTTP client for API requests
+    - `php-mbstring` - Multibyte string handling
+    - `php-xml` - XML processing
+    - `php-zip` - Archive support
+
+    **Installation on Ubuntu/Debian:**
+    ```bash
+    sudo add-apt-repository ppa:ondrej/php
+    sudo apt update
+    sudo apt install php8.4 php8.4-cli php8.4-sqlite3 php8.4-curl \
+                     php8.4-mbstring php8.4-xml php8.4-zip
+    ```
+
+    **Installation on macOS:**
+    ```bash
+    brew install php@8.4
+    ```
+
+    **Verify installation:**
+    ```bash
+    php --version
+    ```
+  </Accordion>
+
+  <Accordion title="Composer" icon="box">
+    Composer is required for managing PHP dependencies.
+
+    **Installation:**
+    ```bash
+    curl -sS https://getcomposer.org/installer | php
+    sudo mv composer.phar /usr/local/bin/composer
+    ```
+
+    **Verify installation:**
+    ```bash
+    composer --version
+    ```
+
+    Learn more at [getcomposer.org](https://getcomposer.org/)
+  </Accordion>
+
+  <Accordion title="pnpm Package Manager" icon="npm">
+    pnpm is used for managing Node.js dependencies with better performance and disk efficiency.
+
+    **Installation via npm:**
+    ```bash
+    npm install -g pnpm
+    ```
+
+    **Installation via standalone script:**
+    ```bash
+    curl -fsSL https://get.pnpm.io/install.sh | sh -
+    ```
+
+    **Verify installation:**
+    ```bash
+    pnpm --version
+    ```
+
+    <Note>
+      Alternatively, you can use Bun (configured in `package.json` as version `1.2.23`) for even faster performance.
+    </Note>
+  </Accordion>
+
+  <Accordion title="MeiliSearch" icon="magnifying-glass">
+    MeiliSearch is required for fast content search and indexing.
+
+    **Installation on Linux:**
+    ```bash
+    curl -L https://install.meilisearch.com | sh
+    ```
+
+    **Installation on macOS:**
+    ```bash
+    brew install meilisearch
+    ```
+
+    **Installation via Docker:**
+    ```bash
+    docker run -d -p 7700:7700 \
+      -e MEILI_MASTER_KEY=your-master-key \
+      -v $(pwd)/meili_data:/meili_data \
+      getmeili/meilisearch:latest
+    ```
+
+    **Running MeiliSearch:**
+    ```bash
+    meilisearch --master-key=your-master-key
+    ```
+
+    <Warning>
+      MeiliSearch must be running on port 7700 before syncing content. Make sure to set a secure master key in production.
+    </Warning>
+
+    Learn more at [meilisearch.com](https://www.meilisearch.com/)
+  </Accordion>
+
+  <Accordion title="aria2 Download Manager" icon="download">
+    aria2 is a lightweight multi-protocol & multi-source command-line download utility.
+
+    **Installation on Ubuntu/Debian:**
+    ```bash
+    sudo apt install aria2
+    ```
+
+    **Installation on macOS:**
+    ```bash
+    brew install aria2
+    ```
+
+    **Running aria2 RPC server:**
+    ```bash
+    aria2c --enable-rpc --rpc-listen-all=true \
+           --rpc-secret=your-secret-token \
+           --dir=/path/to/downloads
+    ```
+
+    **Recommended: Motrix GUI**
+    
+    For a better experience, install [Motrix](https://motrix.app/) which provides a graphical interface for aria2 with RPC enabled by default:
+    - Download from [motrix.app](https://motrix.app/)
+    - Enable RPC in settings
+    - Configure RPC secret token
+
+    <Tip>
+      Motrix runs aria2 in the background and provides a clean UI for monitoring downloads. Perfect for desktop use.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+### Service Requirements
+
+<Card title="Lionz TV Subscription" icon="tv">
+  You need an active [Lionz TV](https://lionz.tv) subscription with Xtream Codes API credentials:
+  - API Host
+  - API Port (typically 80 or 443)
+  - Username
+  - Password
+
+  Contact Lionz TV support if you need help obtaining your API credentials.
+</Card>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the repository from GitHub:
+
+    ```bash
+    git clone https://github.com/shekohex/lionzhd.git
+    cd lionzhd
+    ```
+
+    <Note>
+      Current version: `1.0.13` (check `composer.json` for latest)
+    </Note>
+  </Step>
+
+  <Step title="Install PHP Dependencies">
+    Install Laravel and all required PHP packages:
+
+    ```bash
+    composer install
+    ```
+
+    This will install:
+    - Laravel 12 framework
+    - Inertia.js for SPA functionality
+    - Laravel Scout for search integration
+    - MeiliSearch PHP client
+    - Saloon HTTP client for API requests
+    - And many more dependencies (see `composer.json`)
+
+    <CodeGroup>
+    ```bash Production
+    composer install --no-dev --optimize-autoloader
+    ```
+
+    ```bash Development
+    composer install
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install Node.js Dependencies">
+    Install React, TypeScript, and frontend build tools:
+
+    ```bash
+    pnpm install
+    ```
+
+    This installs:
+    - React 19 with TypeScript
+    - Inertia.js React adapter
+    - Tailwind CSS 4
+    - Radix UI components
+    - Vite for build tooling
+    - And all frontend dependencies
+
+    <Tip>
+      Using Bun? Run `bun install` instead for faster installation.
+    </Tip>
+  </Step>
+
+  <Step title="Create SQLite Database">
+    Create an empty SQLite database file:
+
+    ```bash
+    touch database/database.sqlite
+    ```
+
+    <Note>
+      SQLite is the default database configured in `.env.example`. You can switch to MySQL or PostgreSQL if needed by modifying the `DB_CONNECTION` setting.
+    </Note>
+  </Step>
+
+  <Step title="Run Post-Installation Script">
+    Execute the post-installation script to set up the application:
+
+    ```bash
+    composer run-script post-create-project-cmd
+    ```
+
+    This script performs:
+    - Generates application encryption key (`APP_KEY`)
+    - Creates database file if missing
+    - Runs all database migrations
+
+    **Output example:**
+    ```bash
+    Application key set successfully.
+    Migration table created successfully.
+    Migrating: 0001_01_01_000000_create_users_table
+    Migrated:  0001_01_01_000000_create_users_table (45.67ms)
+    # ... more migrations
+    ```
+  </Step>
+
+  <Step title="Set Up Environment Configuration">
+    Copy the environment example file:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    See the [Configuration Guide](/configuration) for detailed information on setting up your `.env` file.
+  </Step>
+
+  <Step title="Verify Installation">
+    Verify the installation by checking Laravel's status:
+
+    ```bash
+    php artisan about
+    ```
+
+    You should see information about your Laravel installation, environment, and cache status.
+  </Step>
+</Steps>
+
+## Optional Components
+
+### Development Tools
+
+For development, the following tools are included:
+
+<AccordionGroup>
+  <Accordion title="Laravel Telescope" icon="telescope">
+    Debug assistant for Laravel applications (already included).
+
+    Access at: `http://localhost:8000/telescope`
+
+    Configured in `.env`:
+    ```ini
+    TELESCOPE_ENABLED=true
+    ```
+  </Accordion>
+
+  <Accordion title="Laravel Pail" icon="terminal">
+    Real-time log viewer for development.
+
+    Run with:
+    ```bash
+    php artisan pail
+    ```
+
+    <Tip>
+      Pail is automatically started when you run `composer dev`
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Laravel Octane" icon="bolt">
+    Supercharge Laravel performance with Octane (already included).
+
+    **Run with Octane:**
+    ```bash
+    php artisan octane:start
+    ```
+
+    Configured in `config/octane.php`
+  </Accordion>
+</AccordionGroup>
+
+### Production Optimization
+
+For production deployments:
+
+```bash
+# Optimize autoloader
+composer install --optimize-autoloader --no-dev
+
+# Cache configuration
+php artisan config:cache
+
+# Cache routes
+php artisan route:cache
+
+# Cache views
+php artisan view:cache
+
+# Build frontend assets
+pnpm run build
+```
+
+## Verification
+
+After installation, verify everything is working:
+
+<Steps>
+  <Step title="Check PHP Version">
+    ```bash
+    php --version
+    # Should show PHP 8.4 or higher
+    ```
+  </Step>
+
+  <Step title="Check Database Connection">
+    ```bash
+    php artisan db:show
+    ```
+  </Step>
+
+  <Step title="Verify MeiliSearch">
+    ```bash
+    curl http://localhost:7700/health
+    # Should return: {"status":"available"}
+    ```
+  </Step>
+
+  <Step title="Test aria2 RPC">
+    ```bash
+    curl http://localhost:6800/jsonrpc
+    # Should return aria2 RPC response
+    ```
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="sliders" href="/configuration">
+    Configure your environment variables and service connections
+  </Card>
+  
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Complete the quickstart guide to sync your first content
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Permission Errors">
+    If you encounter permission errors:
+
+    ```bash
+    sudo chown -R $USER:$USER .
+    chmod -R 755 storage bootstrap/cache
+    ```
+  </Accordion>
+
+  <Accordion title="Port Already in Use">
+    If port 8000 is already in use:
+
+    ```bash
+    php artisan serve --port=8080
+    ```
+  </Accordion>
+
+  <Accordion title="SQLite Extension Missing">
+    Install SQLite extension for PHP:
+
+    ```bash
+    # Ubuntu/Debian
+    sudo apt install php8.4-sqlite3
+
+    # macOS (usually included)
+    brew reinstall php@8.4
+    ```
+  </Accordion>
+
+  <Accordion title="Composer Memory Limit">
+    If composer runs out of memory:
+
+    ```bash
+    COMPOSER_MEMORY_LIMIT=-1 composer install
+    ```
+  </Accordion>
+</AccordionGroup>

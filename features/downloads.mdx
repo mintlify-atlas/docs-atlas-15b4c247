@@ -1,0 +1,208 @@
+---
+title: Download Management
+description: Monitor and control your media downloads with aria2 integration
+---
+
+Lionz IPTV Downloader uses **aria2** as the download engine to provide robust, resumable downloads with real-time progress tracking and advanced control options.
+
+## Starting Downloads
+
+You can initiate downloads from multiple places within the application:
+
+### Downloading Movies
+
+1. Navigate to any movie's detail page
+2. Click the **Download** button
+3. The download starts immediately and you're redirected to the Downloads page
+
+### Downloading Series Episodes
+
+**Single Episode:**
+1. Open a series detail page
+2. Find the episode you want to download
+3. Click the download icon next to the episode
+
+**Multiple Episodes (Batch Download):**
+1. Open a series detail page
+2. Select multiple episodes using checkboxes
+3. Click **Download Selected**
+4. All selected episodes queue simultaneously
+
+<Info>
+The application checks for active downloads before starting a new one. If you try to download content that's already in progress, you'll be redirected to the existing download.
+</Info>
+
+## Download Status Page
+
+Access the Downloads page to view all your downloads in one place.
+
+### Download Information
+
+Each download displays:
+
+- **Media Details**: Title, cover art, and type (movie or series episode)
+- **Progress Bar**: Visual indicator of download completion
+- **Status**: Current state (active, paused, waiting, completed, error)
+- **Speed**: Current download speed (for active downloads)
+- **Size**: Total file size and downloaded amount
+- **File Information**: Output directory and filename
+- **Error Details**: Error codes and messages (if applicable)
+
+### Download States
+
+Downloads can be in several states:
+
+- **Active**: Currently downloading with visible progress and speed
+- **Waiting**: Queued and waiting to start
+- **Paused**: Download paused by user or system
+- **Complete**: Successfully finished
+- **Error**: Failed with error code and message
+- **Removed**: Cleared from aria2 but still tracked in the application
+
+## Download Actions
+
+You can control your downloads using various actions:
+
+### Pause Download
+
+Temporarily stop an active download:
+
+1. Locate the download in your Downloads list
+2. Click the **Pause** button
+3. The download pauses immediately and can be resumed later
+
+<Note>
+Paused downloads retain their progress and can resume from where they stopped.
+</Note>
+
+### Resume Download
+
+Continue a paused download:
+
+1. Find the paused download
+2. Click the **Resume** button
+3. Download continues from the last checkpoint
+
+### Retry Download
+
+Restart a failed or errored download:
+
+1. Locate the failed download
+2. Click **Retry**
+3. Choose whether to restart from zero or resume from partial progress
+
+**Retry Options:**
+- **Resume from Checkpoint**: Continues with existing partial files
+- **Restart from Zero**: Deletes partial files and starts fresh
+
+<Tip>
+Retrying a download generates a new GID (download identifier) and requeues the download with the same output settings.
+</Tip>
+
+### Cancel Download
+
+Stop and remove a download:
+
+1. Find the download you want to cancel
+2. Click **Cancel**
+3. Optionally choose to delete partial files
+
+**Cancel Options:**
+- **Keep Partial Files**: Download is stopped but files remain on disk
+- **Delete Partial Files**: Removes the download and deletes incomplete files
+
+<Steps>
+  <Step title="Start Your Download">
+    Click the download button on any movie or series episode
+  </Step>
+  <Step title="Monitor Progress">
+    View real-time status, speed, and completion percentage on the Downloads page
+  </Step>
+  <Step title="Control Downloads">
+    Pause, resume, retry, or cancel downloads as needed
+  </Step>
+  <Step title="Handle Errors">
+    If a download fails, check the error message and use Retry to attempt again
+  </Step>
+</Steps>
+
+## Automatic Retry System
+
+The application includes intelligent retry logic for failed downloads:
+
+- **Error Classification**: Errors are analyzed to determine if retry is appropriate
+- **Backoff Algorithm**: Failed downloads wait before retrying (prevents server overload)
+- **Retry Attempts**: Tracks number of retry attempts per download
+- **Cooldown Period**: Prevents immediate retries, respecting server limits
+
+### Retry Cooldown
+
+When a download fails:
+
+1. The system calculates a backoff period based on retry count
+2. The download enters cooldown with a "retry_next_at" timestamp
+3. Manual retry is disabled until the cooldown expires
+4. Automatic retry can occur after the cooldown period
+
+<Info>
+If you attempt to retry during cooldown, you'll see a message indicating when retry will become available.
+</Info>
+
+## Admin Features
+
+Administrators have additional download management capabilities:
+
+### View All User Downloads
+
+Admins can see downloads from all users:
+
+- View owner information (name and email) for each download
+- Filter downloads by specific users
+- Monitor system-wide download activity
+
+### Owner Filtering
+
+Filter the downloads page by user:
+
+1. Use the owner filter dropdown
+2. Select one or more users
+3. View only downloads belonging to selected users
+
+## Download File Management
+
+The system tracks download file locations:
+
+- **Output Directory**: Configured download destination folder
+- **Output Filename**: Generated based on media title and metadata
+- **File Tracking**: Stores file paths in database for later operations
+- **Cleanup**: Option to delete partial or failed download files
+
+<Card title="aria2 Integration" icon="download">
+All downloads are managed through aria2's JSON-RPC interface, providing:
+
+- Resumable downloads with checkpoint support
+- HTTP pipelining for improved speed
+- Automatic file renaming prevention
+- Continue mode for partial downloads
+</Card>
+
+## Pagination and Performance
+
+The Downloads page displays 10 items per page with:
+
+- Recent downloads shown first (sorted by creation date)
+- Query string preservation for filters and page state
+- Real-time status updates via aria2 status queries
+
+## Error Handling
+
+When downloads encounter errors:
+
+1. **Error Code**: aria2 error code is captured and displayed
+2. **Error Message**: Human-readable error description
+3. **Last Error Tracking**: Error details stored in download record
+4. **Retry Classification**: System determines if error is retryable
+
+<Note>
+Some errors (like network timeouts) are automatically retryable, while others (like invalid URLs) require manual intervention.
+</Note>

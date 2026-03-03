@@ -1,0 +1,398 @@
+---
+title: Environment Variables
+description: Configure your Lionz IPTV Downloader installation using environment variables
+---
+
+Lionz IPTV Downloader uses environment variables for configuration. Copy `.env.example` to `.env` and configure the following variables:
+
+## Application Settings
+
+<ParamField path="APP_NAME" type="string" default="Laravel">
+  The name of your application. This is used in emails and the user interface.
+</ParamField>
+
+<ParamField path="APP_ENV" type="string" default="local">
+  The application environment. Set to `production` for production deployments.
+  
+  **Options:** `local`, `production`, `staging`
+</ParamField>
+
+<ParamField path="APP_KEY" type="string" required>
+  Application encryption key. Generate using `php artisan key:generate`.
+  
+  <Warning>
+    This must be set before running the application. Never share or commit this key.
+  </Warning>
+</ParamField>
+
+<ParamField path="APP_DEBUG" type="boolean" default="true">
+  Enable debug mode. Set to `false` in production to hide detailed error messages.
+  
+  <Warning>
+    Always set to `false` in production environments to prevent information leakage.
+  </Warning>
+</ParamField>
+
+<ParamField path="APP_URL" type="string" default="http://localhost">
+  The base URL of your application. Used for generating links.
+  
+  **Example:** `https://iptv.example.com`
+</ParamField>
+
+<ParamField path="SYNC_MEDIA_MEMORY_LIMIT" type="string" default="512M">
+  Memory limit for media synchronization operations. Increase if syncing large media libraries.
+  
+  **Example:** `1024M`, `2G`
+</ParamField>
+
+## Localization
+
+<ParamField path="APP_LOCALE" type="string" default="en">
+  Default application locale for translations.
+</ParamField>
+
+<ParamField path="APP_FALLBACK_LOCALE" type="string" default="en">
+  Fallback locale when translation is not available in the current locale.
+</ParamField>
+
+<ParamField path="APP_FAKER_LOCALE" type="string" default="en_US">
+  Locale for generating fake data during development and testing.
+</ParamField>
+
+## Performance & Security
+
+<ParamField path="APP_MAINTENANCE_DRIVER" type="string" default="file">
+  Driver for maintenance mode storage.
+  
+  **Options:** `file`, `database`
+</ParamField>
+
+<ParamField path="PHP_CLI_SERVER_WORKERS" type="integer" default="4">
+  Number of PHP CLI server worker processes.
+</ParamField>
+
+<ParamField path="BCRYPT_ROUNDS" type="integer" default="12">
+  Number of bcrypt hashing rounds for password encryption. Higher values are more secure but slower.
+</ParamField>
+
+## Logging
+
+<ParamField path="LOG_CHANNEL" type="string" default="stack">
+  Default log channel for application logging.
+  
+  **Options:** `stack`, `single`, `daily`, `slack`, `syslog`, `stderr`
+</ParamField>
+
+<ParamField path="LOG_STACK" type="string" default="single">
+  Log stack configuration when using the `stack` channel.
+</ParamField>
+
+<ParamField path="LOG_LEVEL" type="string" default="debug">
+  Minimum log level to record.
+  
+  **Options:** `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`
+</ParamField>
+
+<ParamField path="LOG_DEPRECATIONS_CHANNEL" type="string" default="null">
+  Channel for logging deprecation warnings.
+</ParamField>
+
+## Database
+
+<ParamField path="DB_CONNECTION" type="string" default="sqlite">
+  Database driver to use.
+  
+  **Options:** `sqlite`, `mysql`, `pgsql`, `sqlsrv`
+</ParamField>
+
+<ParamField path="DB_HOST" type="string" default="127.0.0.1">
+  Database host. Only required for MySQL, PostgreSQL, or SQL Server.
+</ParamField>
+
+<ParamField path="DB_PORT" type="integer" default="3306">
+  Database port. Only required for MySQL, PostgreSQL, or SQL Server.
+</ParamField>
+
+<ParamField path="DB_DATABASE" type="string">
+  Database name. For SQLite, this is the path to the database file.
+</ParamField>
+
+<ParamField path="DB_USERNAME" type="string">
+  Database username. Not required for SQLite.
+</ParamField>
+
+<ParamField path="DB_PASSWORD" type="string">
+  Database password. Not required for SQLite.
+</ParamField>
+
+## Session & Cache
+
+<ParamField path="SESSION_DRIVER" type="string" default="database">
+  Session storage driver.
+  
+  **Options:** `file`, `cookie`, `database`, `memcached`, `redis`, `array`
+</ParamField>
+
+<ParamField path="SESSION_LIFETIME" type="integer" default="120">
+  Session lifetime in minutes.
+</ParamField>
+
+<ParamField path="SESSION_ENCRYPT" type="boolean" default="false">
+  Encrypt session data.
+</ParamField>
+
+<ParamField path="SESSION_PATH" type="string" default="/">
+  Session cookie path.
+</ParamField>
+
+<ParamField path="SESSION_DOMAIN" type="string" default="null">
+  Session cookie domain.
+</ParamField>
+
+<ParamField path="CACHE_STORE" type="string" default="database">
+  Default cache store.
+  
+  **Options:** `file`, `database`, `memcached`, `redis`, `array`
+</ParamField>
+
+<ParamField path="CACHE_PREFIX" type="string">
+  Prefix for cache keys. Useful when sharing cache infrastructure.
+</ParamField>
+
+## Queue
+
+<ParamField path="QUEUE_CONNECTION" type="string" default="database">
+  Queue driver for background job processing.
+  
+  **Options:** `sync`, `database`, `redis`, `sqs`, `beanstalkd`
+  
+  <Info>
+    Use `database` for simple setups. Use `redis` for better performance in production.
+  </Info>
+</ParamField>
+
+## File Storage
+
+<ParamField path="FILESYSTEM_DISK" type="string" default="local">
+  Default filesystem disk for file storage.
+  
+  **Options:** `local`, `public`, `s3`
+</ParamField>
+
+<ParamField path="BROADCAST_CONNECTION" type="string" default="log">
+  Broadcast driver for real-time events.
+  
+  **Options:** `log`, `pusher`, `redis`, `ably`
+</ParamField>
+
+## External Services
+
+### MeiliSearch
+
+<ParamField path="SCOUT_DRIVER" type="string" default="meilisearch" required>
+  Search driver. Lionz IPTV Downloader uses MeiliSearch for content search.
+  
+  <Warning>
+    This should always be set to `meilisearch` for proper search functionality.
+  </Warning>
+</ParamField>
+
+<ParamField path="SCOUT_QUEUE" type="boolean" default="true">
+  Queue search index updates for better performance.
+</ParamField>
+
+<ParamField path="MEILISEARCH_HOST" type="string" required>
+  MeiliSearch server URL.
+  
+  **Example:** `http://localhost:7700`
+</ParamField>
+
+<ParamField path="MEILISEARCH_KEY" type="string">
+  MeiliSearch master key for authentication. Required if MeiliSearch is configured with a key.
+</ParamField>
+
+### Aria2
+
+See [Aria2 Configuration](/config/aria2) for detailed aria2 settings.
+
+<ParamField path="ARIA2_RPC_HOST" type="string" default="http://localhost">
+  Aria2 RPC server host URL.
+</ParamField>
+
+<ParamField path="ARIA2_RPC_PORT" type="integer" default="6800">
+  Aria2 RPC server port.
+</ParamField>
+
+<ParamField path="ARIA2_RPC_SECRET" type="string">
+  Aria2 RPC secret token for authentication. Must match `rpc-secret` in aria2.conf.
+</ParamField>
+
+<ParamField path="ARIA2_DOWNLOAD_ROOT" type="string" default="storage/app/public/downloads">
+  Root directory for downloaded files. Must match the `dir` setting in aria2.conf.
+</ParamField>
+
+### Xtream Codes API
+
+See [Xtream Codes Configuration](/config/xtream-codes) for detailed API setup.
+
+<ParamField path="XTREAM_CODES_API_HOST" type="string" required>
+  Lionz TV Xtream Codes API host URL.
+  
+  **Example:** `http://api.lionz.tv`
+  
+  <Warning>
+    This is required to connect to Lionz TV services.
+  </Warning>
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_PORT" type="integer" default="80">
+  Xtream Codes API port.
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_USER" type="string" required>
+  Your Lionz TV account username.
+  
+  <Warning>
+    Required for API authentication.
+  </Warning>
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_PASS" type="string" required>
+  Your Lionz TV account password.
+  
+  <Warning>
+    Required for API authentication. Keep this secret.
+  </Warning>
+</ParamField>
+
+<ParamField path="HTTP_CLIENT_USER_AGENT" type="string" default="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0">
+  User agent string for HTTP requests to the Xtream Codes API.
+</ParamField>
+
+## Mail
+
+<ParamField path="MAIL_MAILER" type="string" default="log">
+  Mail driver for sending emails.
+  
+  **Options:** `smtp`, `sendmail`, `mailgun`, `ses`, `postmark`, `log`
+</ParamField>
+
+<ParamField path="MAIL_HOST" type="string" default="127.0.0.1">
+  SMTP server host.
+</ParamField>
+
+<ParamField path="MAIL_PORT" type="integer" default="2525">
+  SMTP server port.
+</ParamField>
+
+<ParamField path="MAIL_USERNAME" type="string">
+  SMTP authentication username.
+</ParamField>
+
+<ParamField path="MAIL_PASSWORD" type="string">
+  SMTP authentication password.
+</ParamField>
+
+<ParamField path="MAIL_FROM_ADDRESS" type="string" default="hello@example.com">
+  Default "from" email address.
+</ParamField>
+
+<ParamField path="MAIL_FROM_NAME" type="string" default="${APP_NAME}">
+  Default "from" name for emails.
+</ParamField>
+
+## Redis
+
+<ParamField path="REDIS_CLIENT" type="string" default="phpredis">
+  Redis client library.
+  
+  **Options:** `phpredis`, `predis`
+</ParamField>
+
+<ParamField path="REDIS_HOST" type="string" default="127.0.0.1">
+  Redis server host.
+</ParamField>
+
+<ParamField path="REDIS_PASSWORD" type="string" default="null">
+  Redis server password.
+</ParamField>
+
+<ParamField path="REDIS_PORT" type="integer" default="6379">
+  Redis server port.
+</ParamField>
+
+## AWS
+
+<ParamField path="AWS_ACCESS_KEY_ID" type="string">
+  AWS access key ID for S3 storage.
+</ParamField>
+
+<ParamField path="AWS_SECRET_ACCESS_KEY" type="string">
+  AWS secret access key for S3 storage.
+</ParamField>
+
+<ParamField path="AWS_DEFAULT_REGION" type="string" default="us-east-1">
+  AWS region for S3 storage.
+</ParamField>
+
+<ParamField path="AWS_BUCKET" type="string">
+  S3 bucket name for file storage.
+</ParamField>
+
+<ParamField path="AWS_USE_PATH_STYLE_ENDPOINT" type="boolean" default="false">
+  Use path-style endpoint for S3 (required for MinIO).
+</ParamField>
+
+## Development Tools
+
+<ParamField path="TELESCOPE_ENABLED" type="boolean" default="true">
+  Enable Laravel Telescope debugging dashboard.
+  
+  <Info>
+    Set to `false` in production or if you don't need debugging tools.
+  </Info>
+</ParamField>
+
+<ParamField path="VITE_APP_NAME" type="string" default="${APP_NAME}">
+  Application name for Vite asset compilation.
+</ParamField>
+
+## Feature Flags
+
+<ParamField path="FEATURE_DIRECT_DOWNLOAD_LINKS" type="boolean" default="true">
+  Enable direct download links for media files.
+  
+  When enabled, users can download files directly from the storage location without going through the application.
+</ParamField>
+
+## Example Configuration
+
+```bash .env
+APP_NAME="Lionz IPTV Downloader"
+APP_ENV=production
+APP_KEY=base64:your-generated-key-here
+APP_DEBUG=false
+APP_URL=https://iptv.example.com
+
+DB_CONNECTION=sqlite
+
+SCOUT_DRIVER=meilisearch
+SCOUT_QUEUE=true
+MEILISEARCH_HOST=http://localhost:7700
+MEILISEARCH_KEY=your-master-key
+
+ARIA2_RPC_HOST=http://localhost
+ARIA2_RPC_PORT=6800
+ARIA2_RPC_SECRET=your-secret-token
+
+XTREAM_CODES_API_HOST=http://api.lionz.tv
+XTREAM_CODES_API_PORT=80
+XTREAM_CODES_API_USER=your-username
+XTREAM_CODES_API_PASS=your-password
+
+QUEUE_CONNECTION=database
+SESSION_DRIVER=database
+CACHE_STORE=database
+
+FEATURE_DIRECT_DOWNLOAD_LINKS=true
+```

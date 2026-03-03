@@ -1,0 +1,655 @@
+---
+title: Deployment Troubleshooting
+description: Common deployment issues and solutions for Lionz IPTV Downloader
+---
+
+This guide covers common issues you may encounter when deploying Lionz IPTV Downloader and their solutions.
+
+## General Troubleshooting Steps
+
+Before diving into specific issues, try these general steps:
+
+<Steps>
+  <Step title="Check container status">
+    ```bash
+    docker-compose ps
+    ```
+    Verify all services are running and healthy.
+  </Step>
+
+  <Step title="Review logs">
+    ```bash
+    docker-compose logs -f
+    ```
+    Look for error messages in application, queue, and scheduler logs.
+  </Step>
+
+  <Step title="Verify environment configuration">
+    ```bash
+    docker-compose exec application php artisan config:show
+    ```
+    Ensure all environment variables are set correctly.
+  </Step>
+
+  <Step title="Check service connectivity">
+    ```bash
+    docker-compose exec application ping host.docker.internal
+    ```
+    Verify connection to host services (Aria2, Meilisearch).
+  </Step>
+</Steps>
+
+## Container Issues
+
+<AccordionGroup>
+  <Accordion title="Containers fail to start">
+    **Symptoms:**
+    - `docker-compose up` exits with errors
+    - Containers show "Exited" status
+
+    **Solutions:**
+
+    1. Check Docker logs:
+    ```bash
+    docker-compose logs application
+    docker-compose logs queue
+    docker-compose logs scheduler
+    ```
+
+    2. Verify Docker has sufficient resources:
+    ```bash
+    docker info | grep -i memory
+    ```
+    Ensure at least 2GB RAM is available.
+
+    3. Check for port conflicts:
+    ```bash
+    # Check if port 8000 is already in use
+    lsof -i :8000
+    netstat -tuln | grep 8000
+    ```
+
+    4. Rebuild images from scratch:
+    ```bash
+    docker-compose down -v
+    docker-compose build --no-cache
+    docker-compose up -d
+    ```
+  </Accordion>
+
+  <Accordion title="Application container restarts repeatedly">
+    **Symptoms:**
+    - Container shows "Restarting" status
+    - Health check fails continuously
+
+    **Solutions:**
+
+    1. Check the entrypoint script execution:
+    ```bash
+    docker-compose logs application | grep entrypoint
+    ```
+
+    2. Verify database initialization (docker/entrypoint.sh:8):
+    ```bash
+    # Check if database file exists
+    ls -la ./data/database/
+    ```
+
+    3. Check migration failures:
+    ```bash
+    docker-compose exec application php artisan migrate:status
+    ```
+
+    4. Verify APP_KEY is set:
+    ```bash
+    docker-compose exec application php artisan key:generate
+    docker-compose restart application
+    ```
+
+    5. Check disk space:
+    ```bash
+    df -h
+    docker system df
+    ```
+  </Accordion>
+
+  <Accordion title="Queue worker stops processing jobs">
+    **Symptoms:**
+    - Downloads stuck in pending state
+    - Queue container running but idle
+
+    **Solutions:**
+
+    1. Restart queue workers (docker/entrypoint.sh:26):
+    ```bash
+    docker-compose exec queue php artisan queue:restart
+    docker-compose restart queue
+    ```
+
+    2. Check for failed jobs:
+    ```bash
+    docker-compose exec application php artisan queue:failed
+    ```
+
+    3. Retry failed jobs:
+    ```bash
+    docker-compose exec application php artisan queue:retry all
+    ```
+
+    4. Monitor queue in real-time:
+    ```bash
+    docker-compose exec queue php artisan queue:monitor database
+    ```
+
+    5. Check memory limits (docker/Dockerfile:105):
+    ```bash
+    docker stats queue
+    ```
+    If memory usage approaches 2GB, the worker restarts automatically.
+  </Accordion>
+</AccordionGroup>
+
+## Database Issues
+
+<AccordionGroup>
+  <Accordion title="Database file permission errors">
+    **Symptoms:**
+    - "Permission denied" errors in logs
+    - "Unable to open database file" errors
+
+    **Solutions:**
+
+    1. Fix permissions on host:
+    ```bash
+    sudo chown -R $USER:$USER ./data/database
+    chmod -R 755 ./data/database
+    ```
+
+    2. Ensure directory exists before container start:
+    ```bash
+    mkdir -p ./data/database
+    touch ./data/database/database.sqlite
+    ```
+
+    3. Check container user (should be www-data):
+    ```bash
+    docker-compose exec application whoami
+    ```
+
+    4. Recreate with correct permissions:
+    ```bash
+    docker-compose down
+    rm -rf ./data/database/database.sqlite
+    docker-compose up -d
+    ```
+  </Accordion>
+
+  <Accordion title="Migration failures">
+    **Symptoms:**
+    - Container starts but migrations fail
+    - "Table already exists" errors
+
+    **Solutions:**
+
+    1. Check migration status:
+    ```bash
+    docker-compose exec application php artisan migrate:status
+    ```
+
+    2. Rollback and re-migrate:
+    ```bash
+    docker-compose exec application php artisan migrate:rollback
+    docker-compose exec application php artisan migrate --force
+    ```
+
+    3. Fresh migration (DESTRUCTIVE - deletes all data):
+    ```bash
+    docker-compose exec application php artisan migrate:fresh --force
+    ```
+
+    4. Check database connection:
+    ```bash
+    docker-compose exec application php artisan db:show
+    ```
+  </Accordion>
+
+  <Accordion title="Database locked errors">
+    **Symptoms:**
+    - "Database is locked" errors
+    - Timeouts during high concurrency
+
+    **Solutions:**
+
+    SQLite has limited concurrency. For production:
+
+    1. Enable WAL mode (better concurrency):
+    ```bash
+    docker-compose exec application sqlite3 /data/database/database.sqlite "PRAGMA journal_mode=WAL;"
+    ```
+
+    2. Increase busy timeout:
+    ```php
+    // Add to config/database.php
+    'sqlite' => [
+        'database' => env('DB_DATABASE'),
+        'options' => [
+            PDO::ATTR_TIMEOUT => 30,
+        ],
+    ],
+    ```
+
+    3. Consider migrating to PostgreSQL/MySQL for high-traffic deployments.
+  </Accordion>
+</AccordionGroup>
+
+## External Service Integration
+
+<AccordionGroup>
+  <Accordion title="Cannot connect to Aria2 RPC">
+    **Symptoms:**
+    - Downloads fail immediately
+    - "Connection refused" to Aria2
+
+    **Solutions:**
+
+    1. Verify Aria2 is running on host:
+    ```bash
+    curl http://localhost:6800/jsonrpc
+    ```
+
+    2. Check host.docker.internal resolution:
+    ```bash
+    docker-compose exec application ping host.docker.internal
+    ```
+
+    3. Update ARIA2_RPC_HOST in .env or docker-compose.yml:
+    ```bash
+    # If Aria2 is on a different host
+    ARIA2_RPC_HOST=http://your-aria2-host:6800
+    ```
+
+    4. For Linux, add extra_hosts to docker-compose.yml:
+    ```yaml
+    application:
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+    ```
+
+    5. Test connection from container:
+    ```bash
+    docker-compose exec application curl http://host.docker.internal:6800/jsonrpc
+    ```
+  </Accordion>
+
+  <Accordion title="Meilisearch connection issues">
+    **Symptoms:**
+    - Search not working
+    - "Connection refused" to Meilisearch
+    - Index sync failures
+
+    **Solutions:**
+
+    1. Verify Meilisearch is running:
+    ```bash
+    curl http://localhost:7700/health
+    ```
+
+    2. Check MEILISEARCH_HOST configuration (docker-compose.yml:13):
+    ```bash
+    docker-compose exec application env | grep MEILISEARCH
+    ```
+
+    3. Sync indexes manually (docker/entrypoint.sh:52):
+    ```bash
+    docker-compose exec application php artisan scout:sync-index-settings
+    ```
+
+    4. Re-index all data:
+    ```bash
+    docker-compose exec application php artisan scout:flush "App\\Models\\Media"
+    docker-compose exec application php artisan scout:import "App\\Models\\Media"
+    ```
+
+    5. Verify master key if authentication is enabled:
+    ```bash
+    # In .env
+    MEILISEARCH_KEY=your-master-key
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Slow response times">
+    **Symptoms:**
+    - Pages take >1 second to load
+    - Timeouts under moderate load
+
+    **Solutions:**
+
+    1. Verify caches are active (docker/entrypoint.sh:38-41):
+    ```bash
+    docker-compose exec application php artisan optimize:status
+    ```
+
+    2. Rebuild caches:
+    ```bash
+    docker-compose exec application php artisan optimize
+    ```
+
+    3. Check OPcache status:
+    ```bash
+    docker-compose exec application php -i | grep opcache
+    ```
+
+    4. Monitor PHP-FPM/FrankenPHP workers:
+    ```bash
+    docker-compose exec application php artisan octane:status
+    ```
+
+    5. Increase worker count if needed (edit docker/Dockerfile:112):
+    ```bash
+    # Add --workers flag
+    CMD ["php", "artisan", "octane:frankenphp", "--workers=4", ...]
+    ```
+  </Accordion>
+
+  <Accordion title="High memory usage">
+    **Symptoms:**
+    - Containers using >1GB RAM
+    - Out of memory errors
+
+    **Solutions:**
+
+    1. Check current memory usage:
+    ```bash
+    docker stats --no-stream
+    ```
+
+    2. Review PHP memory limit (docker/Dockerfile:43):
+    ```ini
+    memory_limit = 1024M
+    ```
+
+    3. Optimize queue worker memory (docker/Dockerfile:105):
+    ```bash
+    # Workers restart after hitting limit
+    --memory=2048
+    ```
+
+    4. Clear application cache:
+    ```bash
+    docker-compose exec application php artisan cache:clear
+    ```
+
+    5. Check for memory leaks in jobs:
+    ```bash
+    docker-compose exec queue php artisan queue:work --once
+    # Monitor memory after each job
+    ```
+  </Accordion>
+
+  <Accordion title="Download jobs timeout">
+    **Symptoms:**
+    - Large downloads fail mid-stream
+    - "Maximum execution time exceeded"
+
+    **Solutions:**
+
+    1. Queue worker already has unlimited timeout (docker/Dockerfile:105):
+    ```bash
+    --timeout=0
+    ```
+
+    2. Increase PHP max_execution_time if needed (docker/Dockerfile:41):
+    ```ini
+    max_execution_time = 120
+    ```
+
+    3. Check Aria2 configuration:
+    ```bash
+    # Ensure Aria2 has sufficient timeout settings
+    ```
+
+    4. Monitor job progress:
+    ```bash
+    docker-compose logs -f queue
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Build Issues
+
+<AccordionGroup>
+  <Accordion title="Frontend build fails">
+    **Symptoms:**
+    - Docker build fails during frontend stage
+    - Vite errors in build logs
+
+    **Solutions:**
+
+    1. Check Node/Bun version (docker/Dockerfile:3):
+    ```dockerfile
+    FROM oven/bun:1-alpine as frontend
+    ```
+
+    2. Clear Bun cache and rebuild:
+    ```bash
+    docker-compose build --no-cache --pull frontend
+    ```
+
+    3. Verify package.json and bun.lock exist:
+    ```bash
+    ls -la package.json bun.lock
+    ```
+
+    4. Build frontend locally to debug:
+    ```bash
+    bun install
+    bun run build
+    ```
+
+    5. Check for missing environment variables (docker/Dockerfile:9-11):
+    ```dockerfile
+    ENV VITE_APP_NAME=$APP_NAME
+    ENV APP_ENV=$ENVIRONMENT
+    ```
+  </Accordion>
+
+  <Accordion title="Composer dependencies fail to install">
+    **Symptoms:**
+    - Build fails during composer install
+    - Missing PHP extensions
+
+    **Solutions:**
+
+    1. Verify PHP version (docker/Dockerfile:16):
+    ```dockerfile
+    FROM dunglas/frankenphp:1.5.0-php8.4.5-bookworm
+    ```
+    Ensure composer.json requires compatible PHP version.
+
+    2. Check required extensions (docker/Dockerfile:19-35):
+    ```bash
+    docker-compose exec application php -m
+    ```
+
+    3. Clear Composer cache:
+    ```bash
+    docker-compose build --no-cache --build-arg COMPOSER_CLEAR_CACHE=1
+    ```
+
+    4. Check composer.json syntax:
+    ```bash
+    composer validate
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## HTTPS/TLS Issues
+
+<AccordionGroup>
+  <Accordion title="HTTPS not working">
+    **Symptoms:**
+    - Cannot access site via HTTPS
+    - Certificate errors
+
+    **Solutions:**
+
+    1. Verify HTTPS ports are exposed (docker-compose.yml:46-47):
+    ```yaml
+    ports:
+      - "443:443"
+      - "443:443/udp"
+    ```
+
+    2. Check Caddyfile configuration (docker/Caddyfile):
+    ```bash
+    docker-compose exec application cat /lionz/Caddyfile
+    ```
+
+    3. Ensure domain resolves to server:
+    ```bash
+    nslookup your-domain.com
+    ```
+
+    4. Check Caddy logs:
+    ```bash
+    docker-compose logs application | grep caddy
+    ```
+
+    5. Verify ports 80 and 443 are open:
+    ```bash
+    sudo ufw status
+    sudo firewall-cmd --list-ports
+    ```
+  </Accordion>
+
+  <Accordion title="Let's Encrypt certificate failures">
+    **Symptoms:**
+    - "Failed to obtain certificate" errors
+    - ACME challenge failures
+
+    **Solutions:**
+
+    1. Ensure port 80 is accessible (required for HTTP challenge):
+    ```bash
+    curl -I http://your-domain.com
+    ```
+
+    2. Check DNS records:
+    ```bash
+    dig your-domain.com
+    ```
+
+    3. Review Caddy's ACME directory:
+    ```bash
+    docker-compose exec application ls -la /data/caddy/certificates/
+    ```
+
+    4. Use staging certificates for testing:
+    ```caddyfile
+    {
+      acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Storage and Volumes
+
+<AccordionGroup>
+  <Accordion title="Storage link broken">
+    **Symptoms:**
+    - Uploaded files return 404
+    - `/storage/` URLs don't work
+
+    **Solutions:**
+
+    1. Recreate storage link (docker/entrypoint.sh:46):
+    ```bash
+    docker-compose exec application php artisan storage:link --force
+    ```
+
+    2. Verify link exists:
+    ```bash
+    docker-compose exec application ls -la /lionz/public/storage
+    ```
+
+    3. Check storage directory permissions:
+    ```bash
+    docker-compose exec application ls -la /lionz/storage
+    ```
+  </Accordion>
+
+  <Accordion title="Volume data lost after restart">
+    **Symptoms:**
+    - Database resets after container restart
+    - Uploads disappear
+
+    **Solutions:**
+
+    1. Verify named volumes exist (docker-compose.yml:62-64):
+    ```bash
+    docker volume ls | grep lionz
+    ```
+
+    2. Check volume mounts:
+    ```bash
+    docker-compose config | grep volumes -A 5
+    ```
+
+    3. Don't use `docker-compose down -v` unless intentional:
+    ```bash
+    # This removes volumes:
+    docker-compose down -v  # DON'T DO THIS
+
+    # Use this instead:
+    docker-compose down
+    ```
+
+    4. Backup volumes before operations:
+    ```bash
+    docker run --rm -v lionz_caddy_data:/data -v $(pwd):/backup alpine tar czf /backup/caddy_data.tar.gz /data
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Getting Additional Help
+
+If you continue to experience issues:
+
+1. **Enable debug mode temporarily:**
+```bash
+APP_DEBUG=true
+LOG_LEVEL=debug
+```
+
+2. **Collect diagnostic information:**
+```bash
+docker-compose ps
+docker-compose logs --tail=500 > logs.txt
+docker stats --no-stream > stats.txt
+docker-compose exec application php artisan about > about.txt
+```
+
+3. **Check Laravel logs:**
+```bash
+docker-compose exec application tail -f storage/logs/laravel.log
+```
+
+4. **Review system requirements:**
+   - Docker Engine 20.10+
+   - Docker Compose v2.0+
+   - Minimum 2GB RAM
+   - Sufficient disk space for downloads
+
+5. **Consult documentation:**
+   - [Docker Deployment](/deployment/docker)
+   - [Production Deployment](/deployment/production)
+   - Laravel documentation at laravel.com
+
+6. **Report issues:**
+   - GitHub: https://github.com/shekohex/lionz/issues
+   - Include logs and system information

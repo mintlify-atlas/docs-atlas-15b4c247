@@ -1,0 +1,233 @@
+---
+title: Architecture
+description: Application architecture, tech stack, and directory structure of Lionz IPTV Downloader
+---
+
+## Overview
+
+Lionz IPTV Downloader is a Laravel + React application built with Inertia.js that provides a web interface for downloading media content from Lionz.tv using aria2.
+
+## Tech Stack
+
+### Backend
+
+- **PHP**: 8.4+
+- **Laravel**: 12.0
+- **Laravel Octane**: High-performance application server
+- **Inertia.js**: Server-driven single-page application framework
+- **Saloon**: API client framework for HTTP integrations
+- **Spatie Laravel Data**: Data transfer objects
+- **Laravel Scout + Meilisearch**: Full-text search
+- **Pest**: Testing framework
+
+### Frontend
+
+- **React**: 19.1
+- **TypeScript**: 5.8
+- **Vite**: Build tool
+- **Tailwind CSS**: 4.1
+- **Radix UI**: Headless UI components
+- **Framer Motion**: Animations
+- **Bun**: JavaScript runtime and package manager
+
+### Tools & Services
+
+- **aria2**: Download manager (external dependency)
+- **Laravel Telescope**: Debugging assistant
+- **Laravel Pulse**: Application monitoring
+- **Sentry**: Error tracking
+- **Ziggy**: Laravel routes for JavaScript
+
+## Directory Structure
+
+### Backend (`app/`)
+
+```
+app/
+├── Actions/              # Single-purpose action classes
+│   ├── AutoEpisodes/    # Auto-download monitoring
+│   └── Downloads/       # Download lifecycle management
+├── Casts/               # Eloquent attribute casts
+├── Concerns/            # Reusable traits
+├── Console/             # Artisan commands
+├── Contracts/           # Interfaces
+├── Data/                # DTOs using Spatie Laravel Data
+│   └── AutoEpisodes/
+├── Enums/               # Enumerations
+│   └── AutoEpisodes/
+├── Filters/             # Query filters
+├── Http/
+│   ├── Controllers/     # HTTP controllers
+│   │   ├── Auth/
+│   │   ├── AutoEpisodes/
+│   │   ├── Series/
+│   │   ├── Settings/
+│   │   └── VodStream/
+│   ├── Integrations/    # Saloon API integrations
+│   │   ├── Aria2/       # aria2 JSON-RPC client
+│   │   └── LionzTv/     # Xtream Codes API client
+│   ├── Middleware/
+│   └── Requests/        # Form request validation
+├── Jobs/                # Queue jobs
+│   └── AutoEpisodes/
+├── Listeners/           # Event listeners
+├── Models/              # Eloquent models
+│   └── AutoEpisodes/
+├── Policies/            # Authorization policies
+└── Providers/           # Service providers
+```
+
+### Frontend (`resources/`)
+
+```
+resources/
+├── css/                 # Stylesheets
+├── images/              # Static images
+├── js/
+│   ├── components/      # React components
+│   │   ├── auto-episodes/
+│   │   └── ui/          # Reusable UI components
+│   ├── hooks/           # Custom React hooks
+│   ├── layouts/         # Page layouts
+│   │   ├── app/
+│   │   ├── auth/
+│   │   └── settings/
+│   ├── lib/             # Utilities and helpers
+│   ├── pages/           # Inertia page components
+│   │   ├── auth/
+│   │   ├── errors/
+│   │   ├── movies/
+│   │   ├── series/
+│   │   └── settings/
+│   └── types/           # TypeScript definitions
+└── views/               # Blade templates
+    └── direct-download/ # Non-SPA pages
+```
+
+## Architecture Patterns
+
+### Action Pattern
+
+The application uses single-purpose action classes with the `AsAction` trait for business logic:
+
+```php
+final readonly class DownloadMedia
+{
+    use AsAction;
+
+    public function __construct(
+        private readonly JsonRpcConnector $connector
+    ) {}
+
+    public function __invoke(Uri $url, array $options = []): string
+    {
+        // Action logic here
+    }
+}
+```
+
+Actions can be executed in multiple ways:
+
+```php
+// Static call
+$gid = DownloadMedia::run($url, $options);
+
+// Instance call
+$gid = app(DownloadMedia::class)($url, $options);
+
+// Conditional execution
+DownloadMedia::runIf($shouldDownload, $url, $options);
+```
+
+See `app/Concerns/AsAction.php` for the trait implementation.
+
+### API Integration with Saloon
+
+External API integrations use the Saloon library for clean, testable HTTP clients:
+
+- **Aria2 Integration** (`app/Http/Integrations/Aria2/`): JSON-RPC client for aria2 download manager
+- **Lionz.tv Integration** (`app/Http/Integrations/LionzTv/`): Xtream Codes API client
+
+Each integration includes:
+- Connector class (base configuration)
+- Request classes (individual endpoints)
+- Response DTOs
+- Authentication handlers
+
+### Data Transfer Objects
+
+The application uses Spatie Laravel Data for type-safe DTOs throughout the codebase. All DTOs are in `app/Data/`.
+
+### Inertia.js Architecture
+
+The app follows Inertia.js conventions:
+- Controllers return Inertia responses
+- React components in `resources/js/pages/` map to routes
+- Shared data via `HandleInertiaRequests` middleware
+- Type-safe props using TypeScript
+
+### Queue System
+
+Background processing uses Laravel queues:
+- `MonitorDownloads`: Track download progress via aria2
+- `RefreshMediaContents`: Sync media metadata
+- `RetryDownload`: Retry failed downloads with backoff
+- `SyncCategories`: Sync categories from provider
+- Auto-episode monitoring jobs
+
+### Auto-Episodes System
+
+A dedicated subsystem for automatically downloading new series episodes:
+- `SeriesMonitor` model tracks series for new episodes
+- Scheduled scans check for new content
+- Automatic download queuing with configurable schedules
+- Event tracking and monitoring dashboard
+
+## Configuration
+
+Key configuration areas:
+
+- **Aria2 Config** (`Aria2Config` model): Download manager settings stored in database
+- **Xtream Codes Config** (`XtreamCodesConfig` model): Provider credentials
+- **Environment-based configs**: Uses `LoadsFromEnv` trait for models
+
+## Routes
+
+- `routes/web.php`: Main application routes
+- `routes/auth.php`: Authentication routes
+- `routes/settings.php`: Settings/admin routes
+- `routes/console.php`: Artisan command scheduling
+
+## Key Models
+
+| Model | Purpose |
+|-------|--------|
+| `VodStream` | Movie/VOD content |
+| `Series` | TV series with episodes |
+| `MediaDownloadRef` | Download tracking and lifecycle |
+| `Category` | Content categorization |
+| `Watchlist` | User watchlist |
+| `User` | Application users |
+| `SeriesMonitor` | Auto-episode monitoring |
+| `Aria2Config` | Download manager configuration |
+| `XtreamCodesConfig` | IPTV provider credentials |
+
+## Development Server
+
+The application includes a custom dev command that runs multiple services concurrently:
+
+```bash
+composer dev
+```
+
+This starts:
+- Laravel development server
+- Queue worker
+- Laravel Pail (log viewer)
+- Vite dev server
+
+For SSR development:
+
+```bash
+composer dev:ssr
+```

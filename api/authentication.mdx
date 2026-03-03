@@ -1,0 +1,296 @@
+---
+title: Authentication
+description: Authentication system, middleware, and session management
+---
+
+The application uses Laravel's built-in session-based authentication with email verification requirements.
+
+## Authentication Flow
+
+### Login
+
+Users authenticate through the standard Laravel authentication flow.
+
+**Login Page:**
+```
+GET /login
+```
+
+Renders the login form with session status and available options.
+
+**Response Props:**
+- `canResetPassword` - Whether password reset is available
+- `status` - Session status message
+- `canSignUp` - Whether new user registration is allowed
+- `error` - Any authentication errors
+
+**Login Request:**
+```
+POST /login
+```
+
+Authenticates the user and creates a session.
+
+**After Login:**
+- Session is regenerated for security
+- Redirects to `/discover` route
+- User must have verified email
+
+### Logout
+
+**Endpoint:**
+```
+POST /logout
+```
+
+Destroys the authenticated session.
+
+**Process:**
+1. Logs out user from `web` guard
+2. Invalidates session
+3. Regenerates CSRF token
+4. Redirects to home page (`/`)
+
+**Controller:** `AuthenticatedSessionController::destroy` (routes/web.php:54)
+
+## Session Management
+
+### Session Lifecycle
+
+**Session Creation:**
+- Created on successful login
+- Regenerated after authentication
+- Stores user ID and authentication state
+
+**Session Validation:**
+- All authenticated routes check session validity
+- Middleware: `auth` and `verified`
+
+**Session Termination:**
+- Explicit logout
+- Session timeout (configured in `session.php`)
+- Security-triggered invalidation
+
+### CSRF Protection
+
+All POST, PATCH, and DELETE requests require CSRF token validation:
+
+```html
+<!-- Inertia automatically includes CSRF token -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+```
+
+## Middleware
+
+### Required Middleware
+
+All routes (except `/` and auth routes) are wrapped in middleware group:
+
+```php
+Route::middleware(['auth', 'verified'])->group(...);
+```
+
+**routes/web.php:27**
+
+<ParamField path="auth" type="middleware">
+  Ensures user is authenticated
+  - Redirects to login if not authenticated
+  - Validates session token
+</ParamField>
+
+<ParamField path="verified" type="middleware">
+  Ensures user's email is verified
+  - Redirects to verification prompt if unverified
+  - Required for all application features
+</ParamField>
+
+### Permission Middleware
+
+Certain endpoints require additional authorization:
+
+#### Server Download Permission
+
+```php
+->middleware('can:server-download')
+```
+
+Required for:
+- `GET /movies/{model}/download` (routes/web.php:46)
+- `GET /series/{model}/{season}/{episode}/download` (routes/web.php:68)
+- `POST /series/{model}/download` (routes/web.php:72)
+
+**Purpose:** Controls access to server-side download functionality via Aria2.
+
+#### Auto-Download Schedules Permission
+
+```php
+->middleware('can:auto-download-schedules')
+```
+
+Required for:
+- Series monitoring endpoints (routes/web.php:84)
+- Series monitoring run-now (routes/web.php:99)
+- Series monitoring backfill (routes/web.php:103)
+
+**Purpose:** Restricts access to automated download scheduling features.
+
+#### Download Operations Permission
+
+```php
+->middleware('can:download-operations,model')
+```
+
+Required for:
+- `PATCH /downloads/{model}` (routes/web.php:116)
+- `DELETE /downloads/{model}` (routes/web.php:120)
+
+**Purpose:** Ensures users can only manage their own downloads (or all downloads if admin).
+
+**Implementation:** Checks user role and ownership in `MediaDownloadsController` (app/Http/Controllers/MediaDownloadsController.php:39)
+
+## User Roles
+
+The application implements role-based access control:
+
+### Admin Role
+
+**Enum:** `UserRole::Admin`
+
+Admins have additional capabilities:
+- View all users' downloads
+- Filter downloads by owner
+- Access owner options in downloads list
+
+**Controller Reference:** MediaDownloadsController.php:33
+
+### Member Role
+
+**Enum:** `UserRole::Member`
+
+Members have standard access:
+- View only their own downloads
+- Cannot access admin-specific filters
+- Restricted download operations to owned resources
+
+**Controller Reference:** MediaDownloadsController.php:39
+
+## Current User Access
+
+Controllers access the authenticated user through dependency injection:
+
+```php
+use Illuminate\Container\Attributes\CurrentUser;
+use App\Models\User;
+
+public function method(#[CurrentUser] User $user)
+{
+    // $user is the authenticated user
+}
+```
+
+**Example Usage:**
+- VodStreamController.php:28
+- SeriesController.php:30
+- WatchlistController.php:70
+
+## Email Verification
+
+### Verification Requirement
+
+The `verified` middleware requires users to verify their email before accessing any authenticated routes.
+
+**Verification Flow:**
+1. User registers
+2. Verification email sent
+3. User clicks verification link
+4. Email marked as verified
+5. User can access protected routes
+
+**Verification Routes:**
+Defined in `routes/auth.php` (required at routes/web.php:130)
+
+## Security Features
+
+### Session Regeneration
+
+Sessions are regenerated on authentication to prevent session fixation:
+
+```php
+$request->session()->regenerate();
+```
+
+**Reference:** AuthenticatedSessionController.php:44
+
+### Session Invalidation
+
+Sessions are invalidated on logout:
+
+```php
+$request->session()->invalidate();
+$request->session()->regenerateToken();
+```
+
+**Reference:** AuthenticatedSessionController.php:56-57
+
+### Signed URLs
+
+Direct download links use signed URLs for security:
+
+```php
+Route::get('/dl/{token}', [DirectDownloadController::class, 'show'])
+    ->middleware('signed')
+    ->name('direct.resolve');
+```
+
+**routes/web.php:125-127**
+
+**Features:**
+- Tamper-proof tokens
+- Expiration support
+- Cannot be reused or modified
+
+## Authentication Examples
+
+### Checking Authentication Status
+
+```php
+use Illuminate\Support\Facades\Auth;
+
+// Check if user is authenticated
+if (Auth::check()) {
+    $user = Auth::user();
+}
+```
+
+### Accessing Current User
+
+```php
+// In controllers with CurrentUser attribute
+public function index(#[CurrentUser] User $user)
+{
+    $userId = $user->id;
+    $userName = $user->name;
+}
+
+// In routes/closures
+$user = $request->user();
+```
+
+### Checking Watchlist Membership
+
+```php
+$inWatchlist = $user->inMyWatchlist($streamId, VodStream::class);
+```
+
+**Reference:** VodStreamController.php:137, SeriesController.php:156
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Movies API" icon="film" href="/api/movies">
+    Explore movie and VOD endpoints
+  </Card>
+  <Card title="Series API" icon="tv" href="/api/series">
+    Browse series and episode endpoints
+  </Card>
+</CardGroup>

@@ -1,0 +1,319 @@
+---
+title: Xtream Codes API Configuration
+description: Connect to Lionz TV using the Xtream Codes API
+---
+
+Lionz IPTV Downloader connects to Lionz TV services using the Xtream Codes API protocol. This allows the application to fetch VOD streams, series, and live TV content.
+
+## What is Xtream Codes API?
+
+Xtream Codes API is a standardized IPTV panel API that provides:
+
+- VOD (Video on Demand) stream listings
+- Series and episode information
+- Live TV channels
+- EPG (Electronic Program Guide) data
+- Category organization
+- User authentication and authorization
+
+## Environment Configuration
+
+Configure your Lionz TV credentials in the `.env` file:
+
+<ParamField path="XTREAM_CODES_API_HOST" type="string" required>
+  The Lionz TV Xtream Codes API server URL.
+  
+  **Example:** `http://api.lionz.tv`, `http://panel.lionz.tv`
+  
+  <Warning>
+    This URL is provided by Lionz TV. Contact support if you don't have it.
+  </Warning>
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_PORT" type="integer" default="80">
+  The port number for the API server.
+  
+  **Common values:**
+  - `80` - HTTP (default)
+  - `443` - HTTPS
+  - Custom port as provided by Lionz TV
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_USER" type="string" required>
+  Your Lionz TV account username.
+  
+  <Warning>
+    This is required for API authentication. Use the credentials provided when you signed up for Lionz TV.
+  </Warning>
+</ParamField>
+
+<ParamField path="XTREAM_CODES_API_PASS" type="string" required>
+  Your Lionz TV account password.
+  
+  <Warning>
+    Keep this secret. Never commit this to version control or share it publicly.
+  </Warning>
+</ParamField>
+
+<ParamField path="HTTP_CLIENT_USER_AGENT" type="string" default="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0">
+  User agent string sent with API requests.
+  
+  <Info>
+    Some IPTV providers check the user agent. The default mimics a Firefox browser.
+  </Info>
+</ParamField>
+
+## Example Configuration
+
+```bash .env
+XTREAM_CODES_API_HOST=http://api.lionz.tv
+XTREAM_CODES_API_PORT=80
+XTREAM_CODES_API_USER=your-username
+XTREAM_CODES_API_PASS=your-password
+HTTP_CLIENT_USER_AGENT="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0"
+```
+
+## API Endpoints
+
+The application constructs API URLs automatically using your configuration:
+
+### Base URL
+
+```
+http://{XTREAM_CODES_API_HOST}:{XTREAM_CODES_API_PORT}
+```
+
+### Player API Endpoint
+
+```
+http://{XTREAM_CODES_API_HOST}:{XTREAM_CODES_API_PORT}/player_api.php
+```
+
+All API requests are sent to this endpoint with different parameters.
+
+## API Actions
+
+The Xtream Codes API supports various actions for retrieving content:
+
+### Get Account Info
+
+Retrieve account information and subscription status:
+
+```
+GET /player_api.php?username={user}&password={pass}
+```
+
+### Get VOD Streams
+
+Retrieve list of available VOD content:
+
+```
+GET /player_api.php?username={user}&password={pass}&action=get_vod_streams
+```
+
+### Get VOD Categories
+
+Retrieve VOD categories for organization:
+
+```
+GET /player_api.php?username={user}&password={pass}&action=get_vod_categories
+```
+
+### Get VOD Info
+
+Retrieve detailed information about a specific VOD stream:
+
+```
+GET /player_api.php?username={user}&password={pass}&action=get_vod_info&vod_id={id}
+```
+
+### Get Series
+
+Retrieve list of TV series:
+
+```
+GET /player_api.php?username={user}&password={pass}&action=get_series
+```
+
+### Get Series Info
+
+Retrieve detailed information about a series including episodes:
+
+```
+GET /player_api.php?username={user}&password={pass}&action=get_series_info&series_id={id}
+```
+
+### Get Live Streams
+
+Retrieve list of live TV channels:
+
+```
+GET /player_api.php?username={user}&password={pass}&action=get_live_streams
+```
+
+## Configuration Model
+
+The application uses the `XtreamCodesConfig` model to manage API configuration. This model:
+
+- Stores connection details in the database
+- Encrypts the password for security
+- Can load configuration from environment variables
+- Provides helper methods for API URLs and credentials
+
+### Loading from Environment
+
+The configuration is automatically loaded from environment variables:
+
+```php
+$config = XtreamCodesConfig::fromEnv();
+```
+
+This creates a configuration object with:
+- `host` from `XTREAM_CODES_API_HOST`
+- `port` from `XTREAM_CODES_API_PORT`
+- `username` from `XTREAM_CODES_API_USER`
+- `password` from `XTREAM_CODES_API_PASS` (encrypted)
+
+### API URL Generation
+
+The model provides methods to generate API URLs:
+
+```php
+// Get base URL
+$baseUrl = $config->baseUrl();
+// Returns: "api.lionz.tv:80"
+
+// Get API URL
+$apiUrl = $config->getApiUrl();
+// Returns: "http://api.lionz.tv:80/player_api.php"
+
+// Get credentials
+$credentials = $config->credentials();
+// Returns: ['username' => '...', 'password' => '...']
+```
+
+## Testing Connection
+
+After configuration, test your Xtream Codes connection:
+
+### Using curl
+
+```bash
+curl "http://api.lionz.tv:80/player_api.php?username=your-username&password=your-password"
+```
+
+You should receive a JSON response with account information:
+
+```json
+{
+  "user_info": {
+    "username": "your-username",
+    "password": "your-password",
+    "status": "Active",
+    "exp_date": "1234567890",
+    "is_trial": "0",
+    "active_cons": "1",
+    "max_connections": "1"
+  },
+  "server_info": {
+    "url": "api.lionz.tv",
+    "port": "80",
+    "time_now": "2026-03-03 12:00:00"
+  }
+}
+```
+
+### Using the Application
+
+The application automatically tests the connection when syncing media:
+
+```bash
+php artisan sync:media
+```
+
+If the connection fails, you'll see an error message with details.
+
+## Troubleshooting
+
+### Authentication Failed
+
+If you receive authentication errors:
+
+1. Verify `XTREAM_CODES_API_USER` and `XTREAM_CODES_API_PASS` are correct
+2. Check if your Lionz TV subscription is active
+3. Ensure you're not exceeding the maximum number of concurrent connections
+4. Contact Lionz TV support to verify your account status
+
+### Connection Timeout
+
+If API requests timeout:
+
+1. Verify `XTREAM_CODES_API_HOST` is correct and accessible
+2. Check if the `XTREAM_CODES_API_PORT` is correct
+3. Ensure your server can reach the Lionz TV API (check firewall rules)
+4. Try accessing the URL directly from your browser or curl
+
+### Invalid Response
+
+If you receive unexpected responses:
+
+1. Verify the API URL format is correct
+2. Check if the Lionz TV service is experiencing issues
+3. Ensure your `HTTP_CLIENT_USER_AGENT` is acceptable to the service
+4. Try the API request manually with curl to see the raw response
+
+### Empty Content
+
+If API returns no VOD streams or series:
+
+1. Check if your subscription includes VOD/Series access
+2. Verify your account has content assigned to it
+3. Try accessing content through other Xtream Codes compatible players
+4. Contact Lionz TV support to verify your package
+
+## Security Best Practices
+
+<Warning>
+  Follow these security practices when configuring the Xtream Codes API:
+  
+  1. **Never commit credentials** - Keep `.env` out of version control
+  2. **Use environment variables** - Don't hardcode credentials in code
+  3. **Rotate passwords** - Change your password periodically
+  4. **Restrict access** - Limit who has access to your credentials
+  5. **Monitor usage** - Check for unauthorized access in your account
+  6. **Use HTTPS** - If available, use HTTPS for API connections
+</Warning>
+
+## API Rate Limiting
+
+Be aware of potential rate limiting:
+
+- Don't make excessive API requests in a short time
+- The application caches API responses where possible
+- Respect the provider's concurrent connection limits
+- Use the sync commands during off-peak hours for large updates
+
+## Syncing Content
+
+Once configured, sync content from Lionz TV:
+
+```bash
+# Sync all media (VOD + Series)
+php artisan sync:media
+
+# Sync only VOD streams
+php artisan sync:vod
+
+# Sync only series
+php artisan sync:series
+```
+
+<Info>
+  Initial sync may take a while depending on the size of your content library. Subsequent syncs are faster as they only update changes.
+</Info>
+
+## Additional Resources
+
+- [Xtream Codes API Documentation](https://github.com/xtream-codes/documentation)
+- Contact Lionz TV support for account-specific questions
+- Check the application logs for detailed API error messages

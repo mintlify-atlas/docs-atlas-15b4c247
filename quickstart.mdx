@@ -1,80 +1,217 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with Lionz IPTV Downloader in under 10 minutes
 ---
 
-## Get started in three steps
+This guide will take you from zero to your first working Lionz IPTV Downloader installation. You'll install dependencies, configure the application, and sync your first content from Lionz TV.
 
-Get your documentation site running locally and make your first customization.
+## Before You Begin
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+Make sure you have:
+- A [Lionz TV](https://lionz.tv) subscription with Xtream Codes API credentials
+- **PHP 8.4** or higher installed
+- **pnpm** package manager
+- Basic familiarity with terminal/command line
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Don't have PHP 8.4, pnpm, or other prerequisites? See the detailed [Installation Guide](/installation) for setup instructions.
 </Note>
+
+## Quick Installation
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Lionz IPTV Downloader repository and navigate to the project directory:
+
+    ```bash
+    git clone https://github.com/shekohex/lionzhd.git
+    cd lionzhd
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install both PHP and Node.js dependencies:
+
+    ```bash
+    composer install
+    pnpm install
+    ```
+
+    <Tip>
+      If you prefer using Bun instead of pnpm, you can use `bun install` as the package manager is already configured in `package.json`.
+    </Tip>
+  </Step>
+
+  <Step title="Set Up Database">
+    Create the SQLite database file:
+
+    ```bash
+    touch database/database.sqlite
+    ```
+  </Step>
+
+  <Step title="Initialize the Project">
+    Run the post-creation script to generate app key and run migrations:
+
+    ```bash
+    composer run-script post-create-project-cmd
+    ```
+
+    This command will:
+    - Generate your application encryption key
+    - Create the database file if it doesn't exist
+    - Run all database migrations
+  </Step>
+
+  <Step title="Configure Environment">
+    Create your `.env` file from the example:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Open `.env` and configure your essential settings:
+
+    ```ini .env
+    # Lionz IPTV Service Credentials (Required)
+    XTREAM_CODES_API_HOST=your-lionz-host
+    XTREAM_CODES_API_PORT=80
+    XTREAM_CODES_API_USER=your-username
+    XTREAM_CODES_API_PASS=your-password
+
+    # MeiliSearch Configuration (Required)
+    MEILISEARCH_HOST=http://localhost:7700
+    MEILISEARCH_KEY=your-master-key
+
+    # Aria2 Configuration (Required for downloads)
+    ARIA2_RPC_HOST=http://localhost
+    ARIA2_RPC_PORT=6800
+    ARIA2_RPC_SECRET=your-secret-token
+    ```
+
+    <Warning>
+      Replace the placeholder values with your actual credentials. The application won't work without valid Lionz TV credentials and MeiliSearch configuration.
+    </Warning>
+  </Step>
+
+  <Step title="Start Required Services">
+    Before starting the application, ensure MeiliSearch and aria2 are running:
+
+    **MeiliSearch** (in a separate terminal):
+    ```bash
+    meilisearch --master-key=your-master-key
+    ```
+
+    **aria2** (in another terminal):
+    ```bash
+    aria2c --enable-rpc --rpc-secret=your-secret-token
+    ```
+
+    <Tip>
+      For a better aria2 experience, consider using [Motrix](https://motrix.app/) which provides a GUI for aria2 with RPC enabled by default.
+    </Tip>
+  </Step>
+
+  <Step title="Initialize Application Configuration">
+    Initialize the application configurations in the database:
+
+    ```bash
+    php artisan lionz:configure
+    ```
+
+    This command stores your aria2 and Xtream Codes configurations from the `.env` file into the database for the application to use.
+  </Step>
+
+  <Step title="Start the Development Server">
+    Start all required development services with a single command:
+
+    ```bash
+    composer dev
+    ```
+
+    This will concurrently run:
+    - Laravel development server (port 8000)
+    - Queue worker for background jobs
+    - Log watcher for debugging
+    - Vite development server for frontend assets
+
+    <Note>
+      The application will be available at `http://localhost:8000`
+    </Note>
+  </Step>
+
+  <Step title="Sync Your First Content">
+    Now sync media content from Lionz TV:
+
+    ```bash
+    php artisan lionz:sync-media
+    ```
+
+    This command will:
+    - Fetch all available categories from Lionz TV
+    - Sync VOD (Video on Demand) content
+    - Sync Series content
+    - Index everything in MeiliSearch for fast searching
+
+    <Note>
+      The first sync may take several minutes depending on the size of your Lionz TV catalog. Subsequent syncs will be faster.
+    </Note>
+  </Step>
+
+  <Step title="Access the Application">
+    Open your browser and navigate to:
+
+    ```
+    http://localhost:8000
+    ```
+
+    You should see the welcome page with your recently added movies and series. You can now:
+    - Search through your content library
+    - Browse movies and series
+    - Download content to your local machine
+    - Set up automatic monitoring for new episodes
+  </Step>
+</Steps>
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Configuration Guide" icon="sliders" href="/configuration">
+    Learn about advanced configuration options and customization
+  </Card>
+  
+  <Card title="Usage Guide" icon="book" href="/usage">
+    Discover all features including search, downloads, and series monitoring
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Explore the Xtream Codes API integration and endpoints
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting">
+    Common issues and their solutions
+  </Card>
+</CardGroup>
+
+## Quick Tips
+
+<Tip>
+  **Sync Regularly**: Set up a cron job to run `php artisan lionz:sync-media` periodically to keep your content library up-to-date with new releases.
+</Tip>
+
+<Tip>
+  **Monitor Favorites**: Use the series monitoring feature to automatically download new episodes of your favorite shows as they're released.
+</Tip>
+
+<Tip>
+  **Performance**: The first sync indexes all content in MeiliSearch. After that, searches are lightning-fast even with thousands of items.
+</Tip>
+
+## Need Help?
+
+If you encounter any issues during setup:
+
+1. Check the [Installation Guide](/installation) for detailed prerequisites
+2. Review the [Configuration Guide](/configuration) for environment setup
+3. Visit the [Troubleshooting](/troubleshooting) page for common issues
+4. Open an issue on [GitHub](https://github.com/shekohex/lionzhd/issues)

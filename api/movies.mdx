@@ -1,0 +1,394 @@
+---
+title: Movies (VOD)
+description: Movie and video-on-demand streaming endpoints
+---
+
+The Movies API provides access to VOD (Video on Demand) content including browsing, streaming, downloading, and watchlist management.
+
+## List Movies
+
+Display a paginated listing of available movies with optional category filtering.
+
+```
+GET /movies
+```
+
+**Route Name:** `movies`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `VodStreamController::index` (app/Http/Controllers/VodStream/VodStreamController.php:28)
+
+### Query Parameters
+
+<ParamField query="category" type="string">
+  Filter movies by category provider ID
+  - If invalid, redirects with warning and shows all categories
+  - Empty string or omitted shows all categories
+  - Special value for uncategorized items handled internally
+</ParamField>
+
+<ParamField query="as_of" type="string">
+  Pagination cursor timestamp
+  - Used for cursor-based pagination
+  - Auto-generated if not provided
+</ParamField>
+
+<ParamField query="as_of_id" type="integer">
+  Pagination cursor ID
+  - Used with `as_of` for stable pagination
+  - Must be positive integer
+</ParamField>
+
+### Response
+
+Returns Inertia response rendering `movies/index` component.
+
+**Props:**
+
+<ResponseField name="movies" type="object">
+  Paginated collection of movies
+  - 20 items per page
+  - Ordered by `added` DESC, `stream_id` DESC
+  - Each movie includes `in_watchlist` flag for current user
+</ResponseField>
+
+<ResponseField name="filters" type="CategoryBrowseFiltersData">
+  Current filter state
+  - Contains selected category ID
+</ResponseField>
+
+<ResponseField name="categories" type="array">
+  Available category sidebar items
+  - Generated for MediaType::Movie
+  - Includes selected state
+</ResponseField>
+
+### Example
+
+```bash
+# Get all movies
+GET /movies
+
+# Filter by category
+GET /movies?category=123
+
+# Paginate
+GET /movies?as_of=2024-01-15T10:30:00&as_of_id=456
+```
+
+---
+
+## Show Movie Details
+
+Display detailed information about a specific movie.
+
+```
+GET /movies/{model}
+```
+
+**Route Name:** `movies.show`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `VodStreamController::show` (app/Http/Controllers/VodStream/VodStreamController.php:134)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Movie stream ID
+  - Must be numeric (validated with `whereNumber`)
+  - Must exist in VodStream model
+</ParamField>
+
+### Response
+
+Returns Inertia response rendering `movies/show` component.
+
+**Props:**
+
+<ResponseField name="info" type="object">
+  Complete movie information from Xtream Codes API
+  - Retrieved via `GetVodInfoRequest`
+  - Contains metadata, cover art, stream URLs, etc.
+</ResponseField>
+
+<ResponseField name="in_watchlist" type="boolean">
+  Whether current user has this movie in their watchlist
+</ResponseField>
+
+### Example
+
+```bash
+GET /movies/12345
+```
+
+---
+
+## Clear Movie Cache
+
+Invalidate cached movie information to force fresh data retrieval.
+
+```
+DELETE /movies/{model}/cache
+```
+
+**Route Name:** `movies.cache`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `VodStreamCacheController::destroy` (app/Http/Controllers/VodStream/VodStreamCacheController.php:15)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Movie stream ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Process:**
+1. Creates `GetVodInfoRequest` with cache invalidation
+2. Sends request to Xtream Codes connector
+3. Redirects back
+
+### Example
+
+```bash
+DELETE /movies/12345/cache
+```
+
+---
+
+## Add to Watchlist
+
+Add a movie to the current user's watchlist.
+
+```
+POST /movies/{model}/watchlist
+```
+
+**Route Name:** `movies.watchlist`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `VodStreamWatchlistController::store` (app/Http/Controllers/VodStream/VodStreamWatchlistController.php:20)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Movie stream ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Success:**
+- Movie added to user's watchlist
+- No flash message (silent success)
+
+**Failure:**
+```php
+return back()->withErrors('Failed to add movie to watchlist.');
+```
+
+### Example
+
+```bash
+POST /movies/12345/watchlist
+```
+
+---
+
+## Remove from Watchlist
+
+Remove a movie from the current user's watchlist.
+
+```
+DELETE /movies/{model}/watchlist
+```
+
+**Route Name:** `movies.watchlist.destroy`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `VodStreamWatchlistController::destroy` (app/Http/Controllers/VodStream/VodStreamWatchlistController.php:33)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Movie stream ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Success:**
+```php
+return back()->with('success', 'Movie removed from watchlist.');
+```
+
+**Failure:**
+```php
+return back()->withErrors('Failed to remove movie from watchlist.');
+```
+
+### Example
+
+```bash
+DELETE /movies/12345/watchlist
+```
+
+---
+
+## Download Movie (Server)
+
+Trigger a server-side download of a movie through Aria2.
+
+```
+GET /movies/{model}/download
+```
+
+**Route Name:** `movies.download`
+
+**Middleware:** `auth`, `verified`, `can:server-download`
+
+**Controller:** `VodStreamDownloadController::create` (app/Http/Controllers/VodStream/VodStreamDownloadController.php:28)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Movie stream ID
+  - Must be numeric
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="return_to" type="string">
+  URL to redirect to after download starts
+  - Must match pattern `/downloads` (with optional path/query)
+  - Defaults to downloads page if not provided or invalid
+</ParamField>
+
+### Response
+
+Redirects to downloads page with query parameters.
+
+**Redirect Parameters:**
+- `downloadable_id` - Stream ID
+- `gid` - Aria2 download GID
+
+**Process:**
+1. Fetches movie info from Xtream Codes API
+2. Checks for existing active downloads
+3. If exists, redirects to existing download
+4. If new, creates Xtream Codes download URL
+5. Initiates Aria2 download
+6. Creates MediaDownloadRef record
+7. Redirects to downloads page
+
+**Controller Reference:** routes/web.php:44-49
+
+### Example
+
+```bash
+GET /movies/12345/download
+GET /movies/12345/download?return_to=/downloads
+```
+
+---
+
+## Direct Download Link
+
+Generate a signed direct download link for client-side downloading.
+
+```
+GET /movies/{model}/direct
+```
+
+**Route Name:** `movies.direct`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `VodStreamDownloadController::direct` (app/Http/Controllers/VodStream/VodStreamDownloadController.php:56)
+
+### Feature Flag
+
+Requires feature flag enabled:
+```php
+config('features.direct_download_links', false)
+```
+
+Returns 404 if disabled.
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Movie stream ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns view response with direct download page.
+
+**View:** `direct-download.start`
+
+**Data:**
+- `signedUrl` - Signed URL for secure direct download
+
+**Process:**
+1. Fetches movie info from Xtream Codes API
+2. Creates signed direct link
+3. Renders download start page
+
+**Controller Reference:** routes/web.php:48
+
+### Example
+
+```bash
+GET /movies/12345/direct
+```
+
+---
+
+## Movie Model
+
+Movies are stored in the `VodStream` model with the following key attributes:
+
+**Key Fields:**
+- `stream_id` - Unique identifier from provider
+- `name` - Movie title
+- `stream_icon` - Cover/poster image URL
+- `category_id` - Category provider ID
+- `added` - Timestamp when added
+- `in_watchlist` - Virtual attribute (exists check)
+
+**Relationships:**
+- `watchlists` - User watchlist entries
+- `category` - Category relationship
+
+**Controller Reference:** VodStreamController.php:44-61
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Series API" icon="tv" href="/api/series">
+    Access TV series and episodes
+  </Card>
+  <Card title="Downloads API" icon="download" href="/api/downloads">
+    Manage download operations
+  </Card>
+  <Card title="Watchlist API" icon="bookmark" href="/api/watchlist">
+    Manage watchlist items
+  </Card>
+</CardGroup>

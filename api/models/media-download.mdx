@@ -1,0 +1,258 @@
+---
+title: MediaDownloadRef Model
+description: MediaDownloadRef model for tracking media downloads with retry logic and error handling
+---
+
+## Overview
+
+The `MediaDownloadRef` model tracks download references for both VOD streams and series episodes. It supports aria2 download management, retry logic, and error tracking.
+
+**Model Path:** `app/Models/MediaDownloadRef.php`  
+**Table:** `media_download_refs`
+
+## Database Schema
+
+<ResponseField name="id" type="integer" required>
+  Auto-incrementing primary key
+</ResponseField>
+
+<ResponseField name="gid" type="string" required>
+  Unique aria2 download GID (globally unique identifier)
+</ResponseField>
+
+<ResponseField name="user_id" type="integer">
+  Foreign key to users table (nullable)
+</ResponseField>
+
+<ResponseField name="media_id" type="integer" required>
+  Polymorphic foreign key to the media (Series or VodStream)
+</ResponseField>
+
+<ResponseField name="media_type" type="string" required>
+  Polymorphic type (e.g., 'App\\Models\\Series' or 'App\\Models\\VodStream')
+</ResponseField>
+
+<ResponseField name="downloadable_id" type="integer" required>
+  ID of the downloadable item (stream_id or episode_id)
+</ResponseField>
+
+<ResponseField name="season" type="integer">
+  Season number (only for series episodes, nullable for VODs)
+</ResponseField>
+
+<ResponseField name="episode" type="integer">
+  Episode number (only for series episodes, nullable for VODs)
+</ResponseField>
+
+<ResponseField name="desired_paused" type="boolean" default="false">
+  Whether the download should be paused
+</ResponseField>
+
+<ResponseField name="canceled_at" type="timestamp">
+  Timestamp when the download was canceled
+</ResponseField>
+
+<ResponseField name="cancel_delete_partial" type="boolean" default="false">
+  Whether to delete partial files on cancellation
+</ResponseField>
+
+<ResponseField name="last_error_code" type="integer">
+  Last error code encountered during download
+</ResponseField>
+
+<ResponseField name="last_error_message" type="text">
+  Last error message encountered
+</ResponseField>
+
+<ResponseField name="retry_attempt" type="integer" default="0">
+  Number of retry attempts made
+</ResponseField>
+
+<ResponseField name="retry_next_at" type="timestamp">
+  Scheduled timestamp for next retry attempt (indexed)
+</ResponseField>
+
+<ResponseField name="download_files" type="array">
+  JSON array of downloaded file information
+</ResponseField>
+
+<ResponseField name="created_at" type="timestamp">
+  Record creation timestamp
+</ResponseField>
+
+<ResponseField name="updated_at" type="timestamp">
+  Record last update timestamp
+</ResponseField>
+
+## Fillable Attributes
+
+```php
+[
+    'gid',
+    'user_id',
+    'media_id',
+    'media_type',
+    'downloadable_id',
+    'season',
+    'episode',
+    'desired_paused',
+    'canceled_at',
+    'cancel_delete_partial',
+    'last_error_code',
+    'last_error_message',
+    'retry_attempt',
+    'retry_next_at',
+    'download_files',
+]
+```
+
+## Type Casts
+
+- `desired_paused` → `boolean`
+- `canceled_at` → `immutable_datetime`
+- `cancel_delete_partial` → `boolean`
+- `last_error_code` → `integer`
+- `retry_attempt` → `integer`
+- `retry_next_at` → `immutable_datetime`
+- `download_files` → `array`
+
+## Factory Methods
+
+### Create from VOD Stream
+
+Create a download reference for a VOD stream:
+
+```php
+public static function fromVodStream(
+    string $gid,
+    VodStream $vodStream,
+    User|int|null $owner = null
+): self
+```
+
+**Example:**
+```php
+$vod = VodStream::find(123);
+$download = MediaDownloadRef::fromVodStream(
+    gid: 'abc123def456',
+    vodStream: $vod,
+    owner: auth()->user()
+);
+```
+
+### Create from Series Episode
+
+Create a download reference for a series episode:
+
+```php
+public static function fromSeriesAndEpisode(
+    string $gid,
+    Series $series,
+    Episode $episode,
+    User|int|null $owner = null
+): self
+```
+
+**Example:**
+```php
+$series = Series::find(456);
+$episode = new Episode(/* episode data */);
+$download = MediaDownloadRef::fromSeriesAndEpisode(
+    gid: 'xyz789abc012',
+    series: $series,
+    episode: $episode,
+    owner: 1 // user ID
+);
+```
+
+## Helper Methods
+
+### Check Media Type
+
+```php
+public function isVodStream(): bool
+```
+
+Returns `true` if the download is for a VOD stream.
+
+```php
+public function isSeriesWithEpisode(): bool
+```
+
+Returns `true` if the download is for a series episode.
+
+**Example:**
+```php
+if ($download->isVodStream()) {
+    // Handle VOD download
+} elseif ($download->isSeriesWithEpisode()) {
+    // Handle series episode download
+}
+```
+
+## Relationships
+
+### Media (Polymorphic)
+
+Get the associated media model (either VodStream or Series):
+
+```php
+public function media(): MorphTo
+```
+
+**Usage:**
+```php
+$download = MediaDownloadRef::find(1);
+$media = $download->media; // Returns VodStream or Series instance
+```
+
+### Owner
+
+Get the user who owns this download:
+
+```php
+public function owner(): BelongsTo
+```
+
+**Usage:**
+```php
+$download = MediaDownloadRef::find(1);
+$user = $download->owner;
+```
+
+## Download Management
+
+### Retry Logic
+
+Track failed downloads with automatic retry:
+
+```php
+$download->update([
+    'last_error_code' => 500,
+    'last_error_message' => 'Connection timeout',
+    'retry_attempt' => $download->retry_attempt + 1,
+    'retry_next_at' => now()->addMinutes(5),
+]);
+```
+
+### Pause and Cancel
+
+```php
+// Pause a download
+$download->update(['desired_paused' => true]);
+
+// Cancel a download
+$download->update([
+    'canceled_at' => now(),
+    'cancel_delete_partial' => true,
+]);
+```
+
+### Query Pending Retries
+
+```php
+// Get downloads ready for retry
+$pendingRetries = MediaDownloadRef::whereNotNull('retry_next_at')
+    ->where('retry_next_at', '<=', now())
+    ->get();
+```

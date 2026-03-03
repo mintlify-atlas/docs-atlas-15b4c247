@@ -1,0 +1,171 @@
+---
+title: API Overview
+description: Introduction to the application's API structure, authentication, and response formats
+---
+
+This API reference documents the web application endpoints built with Laravel and Inertia.js. The application provides streaming media management with movies (VOD), series, downloads, and watchlist functionality.
+
+## Base URL
+
+All endpoints are accessed relative to your application's domain:
+
+```
+https://your-domain.com
+```
+
+## Authentication
+
+Most endpoints require authentication using Laravel's session-based authentication system. All routes except the home page are protected by the `auth` and `verified` middleware.
+
+**Required Middleware:**
+- `auth` - User must be authenticated
+- `verified` - User's email must be verified
+
+**Additional Authorization:**
+Some endpoints require specific permissions:
+- `can:server-download` - Server download operations
+- `can:auto-download-schedules` - Auto-download scheduling
+- `can:download-operations,model` - Download management operations
+
+See [Authentication](/api/authentication) for detailed authentication flows.
+
+## Response Format
+
+This application uses **Inertia.js** for responses, which renders server-side data through client-side components.
+
+### Inertia Responses
+
+Most GET endpoints return Inertia responses:
+
+```php
+Inertia::render('component/name', [
+    'data' => $data,
+    'filters' => $filters,
+]);
+```
+
+### Redirect Responses
+
+POST, PATCH, and DELETE operations typically return redirects:
+
+```php
+// Success with message
+return back()->with('success', 'Operation completed successfully.');
+
+// Error with message
+return back()->withErrors('Operation failed.');
+
+// Named route redirect
+return to_route('route.name');
+```
+
+### Response Messages
+
+**Success Messages:**
+- Returned via `->with('success', 'message')`
+- Available in session flash data
+
+**Error Messages:**
+- Returned via `->withErrors('message')` or `->withErrors(['field' => 'message'])`
+- Accessible through Laravel's error bag
+
+## Route Parameters
+
+### Common Parameters
+
+<ParamField path="model" type="integer" required>
+  The numeric ID of the resource (movie, series, or download)
+  - Must be a positive integer
+  - Validated with `whereNumber('model')`
+</ParamField>
+
+<ParamField path="season" type="integer" required>
+  Season number for series endpoints
+  - Must be a positive integer
+  - Validated with `whereNumber('season')`
+</ParamField>
+
+<ParamField path="episode" type="integer" required>
+  Episode number for series endpoints
+  - Must be a positive integer
+  - Validated with `whereNumber('episode')`
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="category" type="string">
+  Filter results by category ID
+</ParamField>
+
+<ParamField query="as_of" type="string">
+  Pagination cursor timestamp
+</ParamField>
+
+<ParamField query="as_of_id" type="integer">
+  Pagination cursor ID
+</ParamField>
+
+<ParamField query="return_to" type="string">
+  Return URL after download operations (must match `/downloads` pattern)
+</ParamField>
+
+## Rate Limiting
+
+The application uses Laravel's default rate limiting. Specific operations have cooldown periods:
+
+- **Series monitoring run-now**: Configurable cooldown (default: 300 seconds)
+  - Configured via `auto_episodes.run_now_cooldown_seconds`
+
+## Pagination
+
+List endpoints use cursor-based pagination with the following parameters:
+
+- **Movies**: 20 items per page, ordered by `added` (desc) and `stream_id` (desc)
+- **Series**: 20 items per page, ordered by `last_modified` (desc) and `series_id` (desc)
+- **Downloads**: 10 items per page, ordered by `created_at` (desc)
+
+Pagination maintains state through `as_of` and `as_of_id` query parameters.
+
+## Error Handling
+
+### HTTP Status Codes
+
+- `200` - Success
+- `302` - Redirect (after POST/PATCH/DELETE)
+- `404` - Resource not found or feature disabled
+- `403` - Unauthorized (missing permissions)
+
+### Common Error Scenarios
+
+**Category Not Found:**
+```php
+return to_route('movies')->with('warning', 'Category not found. Showing all categories.');
+```
+
+**Episode Not Found:**
+```php
+return back()->withErrors('Episode not found.');
+```
+
+**Permission Denied:**
+Returns 403 when user lacks required middleware permissions.
+
+**Feature Disabled:**
+Returns 404 when optional features are disabled (e.g., direct download links).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn about authentication and session management
+  </Card>
+  <Card title="Movies" icon="film" href="/api/movies">
+    Browse and stream VOD content
+  </Card>
+  <Card title="Series" icon="tv" href="/api/series">
+    Access TV series and episodes
+  </Card>
+  <Card title="Downloads" icon="download" href="/api/downloads">
+    Manage media downloads
+  </Card>
+</CardGroup>

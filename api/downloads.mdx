@@ -1,0 +1,480 @@
+---
+title: Downloads
+description: Media download management endpoints for Aria2 integration
+---
+
+The Downloads API manages server-side media downloads through Aria2, including status tracking, download control, and user permissions.
+
+## List Downloads
+
+Display a paginated list of media downloads for the current user (or all users if admin).
+
+```
+GET /downloads
+```
+
+**Route Name:** `downloads`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `MediaDownloadsController::index` (app/Http/Controllers/MediaDownloadsController.php:30)
+
+### Query Parameters
+
+<ParamField query="owners" type="string">
+  Filter downloads by owner user IDs (admin only)
+  - Comma-separated list of user IDs
+  - Example: `"1,3,5"`
+  - Ignored for non-admin users
+  - Invalid IDs are filtered out
+</ParamField>
+
+### Response
+
+Returns Inertia response rendering `downloads` component.
+
+**Props:**
+
+<ResponseField name="downloads" type="object">
+  Paginated collection of download references
+  - 10 items per page
+  - Ordered by `created_at` DESC
+  - Includes related media information
+  - For admins: includes owner details (id, name, email)
+  - Merged with live Aria2 download status
+</ResponseField>
+
+<ResponseField name="ownerOptions" type="array">
+  Available owner filter options (admin only)
+  - Array of user objects with id, name, email
+  - Only includes users who have downloads
+</ResponseField>
+
+### Download Status Fields
+
+Each download includes real-time status from Aria2:
+
+- `gid` - Aria2 download identifier
+- `status` - Download status (active, waiting, paused, error, complete, removed)
+- `totalLength` - Total file size in bytes
+- `completedLength` - Downloaded bytes
+- `downloadSpeed` - Current download speed (bytes/sec)
+- `errorCode` - Error code if failed
+- `errorMessage` - Error description if failed
+- `dir` - Download destination directory
+- `files` - Array of file information
+
+### User Filtering
+
+**Members:** Only see their own downloads
+```php
+->where('user_id', $user->id)
+```
+
+**Admins:** See all downloads, optionally filtered by owner
+```php
+->when($isAdmin && $ownerIds !== [], fn($query) => $query->whereIn('user_id', $ownerIds))
+```
+
+**Controller Reference:** MediaDownloadsController.php:36-43
+
+### Example
+
+```bash
+# Get own downloads (member)
+GET /downloads
+
+# Get all downloads (admin)
+GET /downloads
+
+# Filter by owners (admin)
+GET /downloads?owners=1,3,5
+```
+
+---
+
+## Edit Download
+
+Perform an action on a download (pause, resume, retry, cancel, remove).
+
+```
+PATCH /downloads/{model}
+```
+
+**Route Name:** `downloads.edit`
+
+**Middleware:** `auth`, `verified`, `can:download-operations,model`
+
+**Controller:** `MediaDownloadsController::edit` (app/Http/Controllers/MediaDownloadsController.php:79)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Download reference ID
+  - Must be numeric
+  - User must have permission to modify this download
+</ParamField>
+
+### Request Body
+
+<ParamField body="action" type="string" required>
+  Action to perform on the download
+  - `pause` - Pause active download
+  - `resume` - Resume paused download
+  - `retry` - Retry failed download
+  - `cancel` - Cancel download and optionally delete partial file
+  - `remove` - Remove download from list
+  - Validated via `MediaDownloadAction` enum
+</ParamField>
+
+<ParamField body="delete_partial" type="boolean">
+  Whether to delete partial file when canceling
+  - Only applies when `action` is `cancel`
+  - Default: false
+</ParamField>
+
+<ParamField body="restart_from_zero" type="boolean">
+  Whether to restart download from beginning when retrying
+  - Only applies when `action` is `retry`
+  - Default: false
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Success Messages:**
+- "Download canceled successfully."
+- "Download retried successfully."
+- "Download status updated successfully."
+
+**Error Messages:**
+- "This download is already canceled and cannot be modified."
+- "Retry is temporarily unavailable while this download is cooling down."
+- "You cannot {action} a download in {status} status."
+- "Unsupported download action."
+- Aria2 error messages
+
+### Action Validation
+
+Actions are validated against current download status:
+
+```php
+$allowed = $data->status->canTakeAction($payload->action);
+```
+
+**Status-Action Compatibility:**
+- Active downloads: can pause, cancel
+- Paused downloads: can resume, cancel
+- Error/Complete downloads: can retry, remove
+- Waiting downloads: can cancel
+
+**Controller Reference:** MediaDownloadsController.php:117-128
+
+### Special Behaviors
+
+**Cancel Action:**
+1. Stops Aria2 download
+2. Optionally deletes partial file
+3. Marks download as canceled in database
+4. Sets `canceled_at` timestamp
+
+**Retry Action:**
+1. Checks retry cooldown period
+2. Removes old Aria2 task
+3. Creates new download with same parameters
+4. Updates database record with new GID
+5. Can optionally restart from zero
+
+**Pause/Resume Actions:**
+1. Sends command to Aria2
+2. Updates `desired_paused` flag in database
+3. Maintains user's pause preference
+
+**Remove Action:**
+1. Removes result from Aria2
+2. Deletes MediaDownloadRef record
+
+**Controller Reference:** MediaDownloadsController.php:85-153
+
+### Example
+
+```bash
+# Pause download
+PATCH /downloads/123
+Content-Type: application/json
+
+{"action": "pause"}
+
+# Cancel and delete partial
+PATCH /downloads/123
+Content-Type: application/json
+
+{"action": "cancel", "delete_partial": true}
+
+# Retry from beginning
+PATCH /downloads/123
+Content-Type: application/json
+
+{"action": "retry", "restart_from_zero": true}
+```
+
+---
+
+## Delete Download
+
+Cancel a download (shorthand for PATCH with cancel action).
+
+```
+DELETE /downloads/{model}
+```
+
+**Route Name:** `downloads.destroy`
+
+**Middleware:** `auth`, `verified`, `can:download-operations,model`
+
+**Controller:** `MediaDownloadsController::destroy` (app/Http/Controllers/MediaDownloadsController.php:156)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Download reference ID
+  - Must be numeric
+  - User must have permission to modify this download
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Success:**
+```php
+->with('success', 'Download canceled successfully.')
+```
+
+**Errors:**
+- Aria2 error messages if cancellation fails
+
+### Behavior
+
+This endpoint is a convenience wrapper that:
+1. Calls `CancelDownload::run($model, false)`
+2. Does NOT delete partial file
+3. Cancels the Aria2 download
+4. Marks download as canceled
+
+**Controller Reference:** MediaDownloadsController.php:156-165
+
+### Example
+
+```bash
+DELETE /downloads/123
+```
+
+---
+
+## Download Permissions
+
+The `can:download-operations,model` middleware enforces ownership:
+
+### Permission Logic
+
+**Members:**
+- Can only modify their own downloads
+- Checked via `user_id` matching
+
+**Admins:**
+- Can modify any user's downloads
+- No ownership restriction
+
+### Database Policy
+
+Permissions are enforced through Laravel's authorization gates, checking:
+
+```php
+$user->id === $download->user_id || $user->role === UserRole::Admin
+```
+
+---
+
+## MediaDownloadRef Model
+
+Downloads are stored in the `MediaDownloadRef` model:
+
+**Key Fields:**
+- `id` - Primary key
+- `gid` - Aria2 download GID (unique)
+- `user_id` - Owner user ID
+- `downloadable_type` - Media type (VodStream or Series)
+- `downloadable_id` - Media ID (stream_id or series_id)
+- `episode_id` - Episode ID (for series only)
+- `canceled_at` - Cancellation timestamp
+- `retry_next_at` - Earliest retry time (cooldown)
+- `desired_paused` - User's pause preference
+- `created_at` - When download was created
+
+**Relationships:**
+- `owner` - User who initiated download
+- `media` - Polymorphic relation to VodStream or Series
+
+**Factory Methods:**
+```php
+MediaDownloadRef::fromVodStream($gid, $model, $user)
+MediaDownloadRef::fromSeriesAndEpisode($gid, $model, $episode, $user)
+```
+
+**Controller Reference:** VodStreamDownloadController.php:45, SeriesDownloadController.php:59, 108
+
+---
+
+## Aria2 Integration
+
+Downloads are managed through Aria2 JSON-RPC API:
+
+### Status Retrieval
+
+```php
+GetDownloadStatus::run(
+    $gids,
+    ['gid', 'status', 'totalLength', 'completedLength', 'downloadSpeed', 'errorCode', 'errorMessage', 'dir', 'files']
+)
+```
+
+**Controller Reference:** MediaDownloadsController.php:48-51
+
+### Download Operations
+
+**Pause:**
+```php
+$connector->send(new PauseRequest($gid))
+```
+
+**Resume:**
+```php
+$connector->send(new UnPauseRequest($gid))
+```
+
+**Remove Result:**
+```php
+$connector->send(new RemoveDownloadResultRequest($gid))
+```
+
+**Controller Reference:** MediaDownloadsController.php:123-127
+
+### Error Handling
+
+Aria2 errors are caught and returned to user:
+
+```php
+if ($response->hasError()) {
+    return back()->withErrors(['action' => $response->errorMessage()]);
+}
+```
+
+**Common Errors:**
+- GID not found
+- Invalid status transition
+- Network/connection issues
+- Disk space issues
+
+---
+
+## Download Actions
+
+Actions are defined in the `MediaDownloadAction` enum:
+
+### Available Actions
+
+<ParamField name="pause" type="action">
+  Pause an active download
+  - Stops downloading temporarily
+  - Can be resumed later
+  - Preserves partial file
+</ParamField>
+
+<ParamField name="resume" type="action">
+  Resume a paused download
+  - Continues from where it left off
+  - Only works on paused downloads
+</ParamField>
+
+<ParamField name="retry" type="action">
+  Retry a failed or completed download
+  - Creates new Aria2 task
+  - Can optionally restart from zero
+  - Subject to cooldown period
+</ParamField>
+
+<ParamField name="cancel" type="action">
+  Cancel an active/paused download
+  - Stops the download
+  - Optionally deletes partial file
+  - Marks as canceled in database
+</ParamField>
+
+<ParamField name="remove" type="action">
+  Remove download from list
+  - Cleans up Aria2 result
+  - Deletes database record
+  - Only for completed/error/removed downloads
+</ParamField>
+
+**Controller Reference:** EditMediaDownloadData.php:7-18
+
+---
+
+## Download Creation Flow
+
+Downloads are initiated from movie or series endpoints:
+
+### Movie Download
+
+1. User accesses `GET /movies/{id}/download`
+2. System fetches movie info from Xtream Codes
+3. Checks for existing active downloads
+4. Creates Xtream Codes download URL
+5. Initiates Aria2 download with generated filename
+6. Creates MediaDownloadRef record
+7. Redirects to downloads page
+
+**Controller:** VodStreamDownloadController.php:28-51
+
+### Series Episode Download
+
+1. User accesses `GET /series/{id}/{season}/{episode}/download`
+2. System fetches series info from Xtream Codes
+3. Validates episode exists
+4. Checks for existing active downloads
+5. Creates Xtream Codes download URL
+6. Initiates Aria2 download with generated filename
+7. Creates MediaDownloadRef record
+8. Redirects to downloads page
+
+**Controller:** SeriesDownloadController.php:34-67
+
+### Batch Episode Download
+
+1. User posts to `POST /series/{id}/download` with episode list
+2. System validates all episodes exist
+3. Creates download URLs for all episodes
+4. Initiates batch download via Aria2
+5. Creates MediaDownloadRef records in transaction
+6. Redirects to downloads page
+
+**Controller:** SeriesDownloadController.php:69-119
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Movies API" icon="film" href="/api/movies">
+    Learn about movie download endpoints
+  </Card>
+  <Card title="Series API" icon="tv" href="/api/series">
+    Learn about series download endpoints
+  </Card>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Understand download permissions
+  </Card>
+</CardGroup>

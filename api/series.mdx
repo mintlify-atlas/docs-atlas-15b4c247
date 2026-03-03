@@ -1,0 +1,755 @@
+---
+title: Series
+description: TV series and episode streaming endpoints
+---
+
+The Series API provides access to TV series content including browsing series, viewing episodes, downloading, and managing automated episode downloads.
+
+## List Series
+
+Display a paginated listing of available TV series with optional category filtering.
+
+```
+GET /series
+```
+
+**Route Name:** `series`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesController::index` (app/Http/Controllers/Series/SeriesController.php:30)
+
+### Query Parameters
+
+<ParamField query="category" type="string">
+  Filter series by category provider ID
+  - If invalid, redirects with warning and shows all categories
+  - Empty string or omitted shows all categories
+  - Supports uncategorized series
+</ParamField>
+
+<ParamField query="as_of" type="string">
+  Pagination cursor timestamp
+  - Used for cursor-based pagination
+  - Auto-generated if not provided
+</ParamField>
+
+<ParamField query="as_of_id" type="integer">
+  Pagination cursor ID
+  - Used with `as_of` for stable pagination
+  - Must be positive integer
+</ParamField>
+
+### Response
+
+Returns Inertia response rendering `series/index` component.
+
+**Props:**
+
+<ResponseField name="series" type="object">
+  Paginated collection of series
+  - 20 items per page
+  - Ordered by `last_modified` DESC, `series_id` DESC
+  - Each series includes `in_watchlist` flag for current user
+</ResponseField>
+
+<ResponseField name="filters" type="CategoryBrowseFiltersData">
+  Current filter state
+  - Contains selected category ID
+</ResponseField>
+
+<ResponseField name="categories" type="array">
+  Available category sidebar items
+  - Generated for MediaType::Series
+  - Includes selected state
+</ResponseField>
+
+### Example
+
+```bash
+# Get all series
+GET /series
+
+# Filter by category
+GET /series?category=456
+
+# Paginate
+GET /series?as_of=2024-01-15T10:30:00&as_of_id=789
+```
+
+---
+
+## Show Series Details
+
+Display detailed information about a specific series including all seasons and episodes.
+
+```
+GET /series/{model}
+```
+
+**Route Name:** `series.show`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesController::show` (app/Http/Controllers/Series/SeriesController.php:153)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric (validated with `whereNumber`)
+  - Must exist in Series model
+</ParamField>
+
+### Response
+
+Returns Inertia response rendering `series/show` component.
+
+**Props:**
+
+<ResponseField name="info" type="object">
+  Complete series information from Xtream Codes API
+  - Retrieved via `GetSeriesInfoRequest`
+  - Contains metadata, seasons, episodes, etc.
+  - Organized as `seasonsWithEpisodes` array
+</ResponseField>
+
+<ResponseField name="in_watchlist" type="boolean">
+  Whether current user has this series in their watchlist
+</ResponseField>
+
+<ResponseField name="monitor" type="SeriesMonitorData|null">
+  Auto-download monitoring configuration for this series
+  - Null if not monitored
+  - Includes schedule, settings, and series info
+</ResponseField>
+
+<ResponseField name="preset_times" type="array">
+  Available preset times for scheduling
+  - From config `auto_episodes.preset_times`
+</ResponseField>
+
+<ResponseField name="backfill_preset_counts" type="array">
+  Available preset episode counts for backfilling
+  - From config `auto_episodes.backfill_preset_counts`
+</ResponseField>
+
+<ResponseField name="run_now_cooldown_seconds" type="integer">
+  Cooldown period for run-now operations
+  - Default: 300 seconds
+  - From config `auto_episodes.run_now_cooldown_seconds`
+</ResponseField>
+
+### Example
+
+```bash
+GET /series/67890
+```
+
+---
+
+## Clear Series Cache
+
+Invalidate cached series information to force fresh data retrieval.
+
+```
+DELETE /series/{model}/cache
+```
+
+**Route Name:** `series.cache`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesCacheController::destroy` (app/Http/Controllers/Series/SeriesCacheController.php)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Controller Reference:** routes/web.php:56-58
+
+### Example
+
+```bash
+DELETE /series/67890/cache
+```
+
+---
+
+## Add Series to Watchlist
+
+Add a series to the current user's watchlist.
+
+```
+POST /series/{model}/watchlist
+```
+
+**Route Name:** `series.watchlist`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesWatchlistController::store` (app/Http/Controllers/Series/SeriesWatchlistController.php:20)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Success:**
+- Series added to user's watchlist
+- No flash message (silent success)
+
+**Failure:**
+```php
+return back()->withErrors('Failed to add series to watchlist.');
+```
+
+### Example
+
+```bash
+POST /series/67890/watchlist
+```
+
+---
+
+## Remove Series from Watchlist
+
+Remove a series from the current user's watchlist.
+
+```
+DELETE /series/{model}/watchlist
+```
+
+**Route Name:** `series.watchlist.destroy`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesWatchlistController::destroy` (app/Http/Controllers/Series/SeriesWatchlistController.php:33)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns redirect back to previous page.
+
+**Success:**
+- Series removed from user's watchlist
+- No flash message (silent success)
+
+**Failure:**
+```php
+return back()->withErrors('Failed to remove series from watchlist.');
+```
+
+### Example
+
+```bash
+DELETE /series/67890/watchlist
+```
+
+---
+
+## Download Single Episode (Server)
+
+Trigger a server-side download of a specific episode through Aria2.
+
+```
+GET /series/{model}/{season}/{episode}/download
+```
+
+**Route Name:** `series.download.single`
+
+**Middleware:** `auth`, `verified`, `can:server-download`
+
+**Controller:** `SeriesDownloadController::create` (app/Http/Controllers/Series/SeriesDownloadController.php:34)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+<ParamField path="season" type="integer" required>
+  Season number
+  - Must be numeric
+</ParamField>
+
+<ParamField path="episode" type="integer" required>
+  Episode number within the season
+  - Must be numeric
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="return_to" type="string">
+  URL to redirect to after download starts
+  - Must match pattern `/downloads`
+  - Defaults to downloads page if not provided or invalid
+</ParamField>
+
+### Response
+
+Redirects to downloads page with query parameters.
+
+**Redirect Parameters:**
+- `episode` - Episode number
+- `downloadable_id` - Episode ID
+- `series_id` - Series ID
+- `gid` - Aria2 download GID
+
+**Success Message:**
+```php
+->with('success', 'Download started.')
+```
+
+**Errors:**
+- "Episode not found." - Invalid season/episode combination
+- "Download already in progress." - Episode already downloading
+
+**Controller Reference:** routes/web.php:64-69
+
+### Example
+
+```bash
+GET /series/67890/1/5/download
+# Downloads Season 1, Episode 5
+```
+
+---
+
+## Batch Download Episodes (Server)
+
+Trigger server-side downloads for multiple episodes at once.
+
+```
+POST /series/{model}/download
+```
+
+**Route Name:** `series.download.batch`
+
+**Middleware:** `auth`, `verified`, `can:server-download`
+
+**Controller:** `SeriesDownloadController::store` (app/Http/Controllers/Series/SeriesDownloadController.php:69)
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Request Body
+
+<ParamField body="selectedEpisodes" type="array" required>
+  Array of episode objects to download
+  - Each object must contain `season` and `episodeNum`
+  - Validated via `BatchDownloadEpisodesData`
+</ParamField>
+
+**Example Request Body:**
+```json
+{
+  "selectedEpisodes": [
+    {"season": 1, "episodeNum": 1},
+    {"season": 1, "episodeNum": 2},
+    {"season": 2, "episodeNum": 1}
+  ]
+}
+```
+
+### Response
+
+Redirects to downloads page.
+
+**Success Message:**
+```php
+->with('success', 'Downloads started for selected episodes.')
+```
+
+**Errors:**
+- "S{season}E{episode} not found." - Invalid episode
+- "Failed to save download references." - Database error
+- Aria2 error messages if download initiation fails
+
+**Process:**
+1. Validates all episodes exist
+2. Creates download URLs for each episode
+3. Initiates batch download via Aria2
+4. Creates MediaDownloadRef records in transaction
+5. Redirects to downloads page
+
+**Controller Reference:** routes/web.php:70-73
+
+### Example
+
+```bash
+POST /series/67890/download
+Content-Type: application/json
+
+{
+  "selectedEpisodes": [
+    {"season": 1, "episodeNum": 1},
+    {"season": 1, "episodeNum": 2}
+  ]
+}
+```
+
+---
+
+## Direct Download Single Episode
+
+Generate a signed direct download link for a single episode.
+
+```
+GET /series/{model}/{season}/{episode}/direct
+```
+
+**Route Name:** `series.direct.single`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesDownloadController::direct` (app/Http/Controllers/Series/SeriesDownloadController.php:124)
+
+### Feature Flag
+
+Requires feature flag enabled:
+```php
+config('features.direct_download_links', false)
+```
+
+Returns 404 if disabled.
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+<ParamField path="season" type="integer" required>
+  Season number
+  - Must be numeric
+</ParamField>
+
+<ParamField path="episode" type="integer" required>
+  Episode number
+  - Must be numeric
+</ParamField>
+
+### Response
+
+Returns view response with direct download page.
+
+**View:** `direct-download.start`
+
+**Data:**
+- `signedUrl` - Signed URL for secure direct download
+
+**Errors:**
+- "Episode not found." - Invalid season/episode
+
+**Controller Reference:** routes/web.php:74-78
+
+### Example
+
+```bash
+GET /series/67890/1/5/direct
+```
+
+---
+
+## Batch Direct Download Links (Text File)
+
+Generate a text file containing direct download links for multiple episodes.
+
+```
+POST /series/{model}/direct.txt
+```
+
+**Route Name:** `series.direct.batch`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `SeriesDownloadController::batchDirectTxt` (app/Http/Controllers/Series/SeriesDownloadController.php:149)
+
+### Feature Flag
+
+Requires feature flag enabled:
+```php
+config('features.direct_download_links', false)
+```
+
+Returns 404 if disabled.
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Request Body
+
+<ParamField body="selectedEpisodes" type="array" required>
+  Array of episode objects
+  - Each object must contain `season` and `episodeNum`
+  - Validated via `BatchDownloadEpisodesData`
+</ParamField>
+
+### Response
+
+Returns text file download.
+
+**Headers:**
+- `Content-Type: text/plain`
+- `Content-Disposition: attachment; filename="direct-links.txt"`
+
+**Content Format:**
+```
+# Direct Download Links for Series, copy one by one or use a download manager
+https://signed-url-1
+https://signed-url-2
+https://signed-url-3
+```
+
+**Errors:**
+- "S{season}E{episode} not found." - Invalid episode
+- "No episodes selected." - Empty selection
+
+**Controller Reference:** routes/web.php:79-81
+
+### Example
+
+```bash
+POST /series/67890/direct.txt
+Content-Type: application/json
+
+{
+  "selectedEpisodes": [
+    {"season": 1, "episodeNum": 1},
+    {"season": 1, "episodeNum": 2}
+  ]
+}
+```
+
+---
+
+## Create Series Monitoring
+
+Enable automated episode download monitoring for a series.
+
+```
+POST /series/{model}/monitoring
+```
+
+**Route Name:** `series.monitoring.store`
+
+**Middleware:** `auth`, `verified`, `can:auto-download-schedules`
+
+**Controller:** `SeriesMonitoringController::store` (app/Http/Controllers/AutoEpisodes/SeriesMonitoringController.php)
+
+**Controller Reference:** routes/web.php:83-89
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Example
+
+```bash
+POST /series/67890/monitoring
+```
+
+---
+
+## Update Series Monitoring
+
+Update the monitoring configuration for a series.
+
+```
+PATCH /series/{model}/monitoring
+```
+
+**Route Name:** `series.monitoring.update`
+
+**Middleware:** `auth`, `verified`, `can:auto-download-schedules`
+
+**Controller:** `SeriesMonitoringController::update`
+
+**Controller Reference:** routes/web.php:90-92
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Example
+
+```bash
+PATCH /series/67890/monitoring
+```
+
+---
+
+## Delete Series Monitoring
+
+Disable automated episode download monitoring for a series.
+
+```
+DELETE /series/{model}/monitoring
+```
+
+**Route Name:** `series.monitoring.destroy`
+
+**Middleware:** `auth`, `verified`, `can:auto-download-schedules`
+
+**Controller:** `SeriesMonitoringController::destroy`
+
+**Controller Reference:** routes/web.php:93-95
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Example
+
+```bash
+DELETE /series/67890/monitoring
+```
+
+---
+
+## Run Series Monitoring Now
+
+Manually trigger an immediate check for new episodes to download.
+
+```
+POST /series/{model}/monitoring/run-now
+```
+
+**Route Name:** `series.monitoring.run-now`
+
+**Middleware:** `auth`, `verified`, `can:auto-download-schedules`
+
+**Controller:** `SeriesMonitoringRunNowController::store`
+
+**Controller Reference:** routes/web.php:97-100
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Cooldown
+
+Subject to cooldown period configured in:
+```php
+config('auto_episodes.run_now_cooldown_seconds', 300) // Default: 5 minutes
+```
+
+### Example
+
+```bash
+POST /series/67890/monitoring/run-now
+```
+
+---
+
+## Backfill Series Episodes
+
+Download multiple past episodes that were released before monitoring started.
+
+```
+POST /series/{model}/monitoring/backfill
+```
+
+**Route Name:** `series.monitoring.backfill`
+
+**Middleware:** `auth`, `verified`, `can:auto-download-schedules`
+
+**Controller:** `SeriesMonitoringBackfillController::store`
+
+**Controller Reference:** routes/web.php:101-104
+
+### Path Parameters
+
+<ParamField path="model" type="integer" required>
+  Series ID
+  - Must be numeric
+</ParamField>
+
+### Example
+
+```bash
+POST /series/67890/monitoring/backfill
+```
+
+---
+
+## Series Model
+
+Series are stored in the `Series` model with the following key attributes:
+
+**Key Fields:**
+- `series_id` - Unique identifier from provider
+- `name` - Series title
+- `cover` - Cover/poster image URL
+- `category_id` - Category provider ID
+- `last_modified` - Last update timestamp
+- `in_watchlist` - Virtual attribute (exists check)
+
+**Relationships:**
+- `watchlists` - User watchlist entries
+- `category` - Category relationship
+- `monitor` - Series monitoring configuration
+
+**Episode Structure:**
+- Episodes organized as `seasonsWithEpisodes[season][episode]`
+- Each episode is an `Episode` object from Xtream Codes API
+
+**Controller Reference:** SeriesController.php:40-57
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Movies API" icon="film" href="/api/movies">
+    Browse and stream VOD content
+  </Card>
+  <Card title="Downloads API" icon="download" href="/api/downloads">
+    Manage download operations
+  </Card>
+  <Card title="Watchlist API" icon="bookmark" href="/api/watchlist">
+    Manage watchlist items
+  </Card>
+</CardGroup>

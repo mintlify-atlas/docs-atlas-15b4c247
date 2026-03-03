@@ -1,0 +1,349 @@
+---
+title: MeiliSearch Configuration
+description: Set up MeiliSearch for fast search indexing in Lionz IPTV Downloader
+---
+
+Lionz IPTV Downloader uses [MeiliSearch](https://www.meilisearch.com/) to provide fast, typo-tolerant search for VOD streams and series content.
+
+## Installation
+
+Install MeiliSearch on your system:
+
+### Using Docker
+
+```bash
+docker run -d \
+  --name meilisearch \
+  -p 7700:7700 \
+  -e MEILI_MASTER_KEY=your-master-key \
+  -v $(pwd)/meili_data:/meili_data \
+  getmeili/meilisearch:v1.5
+```
+
+### Using Binary
+
+Download and run MeiliSearch:
+
+```bash
+# Linux/macOS
+curl -L https://install.meilisearch.com | sh
+
+# Start MeiliSearch
+./meilisearch --master-key="your-master-key"
+```
+
+### Using Package Manager
+
+```bash
+# macOS
+brew install meilisearch
+brew services start meilisearch
+
+# Ubuntu/Debian
+echo "deb [trusted=yes] https://apt.fury.io/meilisearch/ /" | sudo tee /etc/apt/sources.list.d/fury.list
+sudo apt update && sudo apt install meilisearch
+```
+
+<Warning>
+  Always set a strong `MEILI_MASTER_KEY` in production to secure your search instance.
+</Warning>
+
+## Environment Configuration
+
+Configure MeiliSearch connection in your `.env` file:
+
+<ParamField path="SCOUT_DRIVER" type="string" default="meilisearch" required>
+  Laravel Scout driver. Must be set to `meilisearch`.
+  
+  <Warning>
+    Do not change this value. The application requires MeiliSearch for search functionality.
+  </Warning>
+</ParamField>
+
+<ParamField path="SCOUT_QUEUE" type="boolean" default="true">
+  Queue search index updates for better performance.
+  
+  <Info>
+    Set to `true` in production to avoid blocking requests during indexing.
+  </Info>
+</ParamField>
+
+<ParamField path="SCOUT_PREFIX" type="string">
+  Prefix for all search index names. Useful when sharing MeiliSearch between multiple applications.
+  
+  **Example:** `lionz_`, `production_`
+</ParamField>
+
+<ParamField path="MEILISEARCH_HOST" type="string" default="http://localhost:7700" required>
+  MeiliSearch server URL.
+  
+  **Examples:**
+  - Local: `http://localhost:7700`
+  - Remote: `https://meilisearch.example.com`
+  
+  <Warning>
+    This is required for the application to connect to MeiliSearch.
+  </Warning>
+</ParamField>
+
+<ParamField path="MEILISEARCH_KEY" type="string">
+  MeiliSearch master key for authentication.
+  
+  <Warning>
+    Required if MeiliSearch was started with a master key. Keep this secret.
+  </Warning>
+</ParamField>
+
+### Example Configuration
+
+```bash .env
+SCOUT_DRIVER=meilisearch
+SCOUT_QUEUE=true
+MEILISEARCH_HOST=http://localhost:7700
+MEILISEARCH_KEY=your-master-key-here
+```
+
+## Index Configuration
+
+Lionz IPTV Downloader configures two MeiliSearch indexes with specific settings for optimal search performance:
+
+### Series Index
+
+Indexes TV series and shows with the following settings:
+
+<ParamField path="sortableAttributes" type="array">
+  Fields that can be used for sorting search results.
+  
+  **Values:**
+  - `created_at` - Creation date
+  - `last_modified` - Last modification date
+  - `releaseDate` - Release date
+  - `rating` - Rating score
+  - `rating_5based` - 5-star rating
+</ParamField>
+
+<ParamField path="filterableAttributes" type="array">
+  Fields that can be used for filtering search results.
+  
+  **Values:**
+  - `genre` - Genre/category
+  - `category_id` - Category identifier
+</ParamField>
+
+### VOD Streams Index
+
+Indexes video-on-demand content with the following settings:
+
+<ParamField path="sortableAttributes" type="array">
+  Fields that can be used for sorting VOD results.
+  
+  **Values:**
+  - `created_at` - Creation date
+  - `added` - Date added to library
+  - `rating` - Rating score
+  - `rating_5based` - 5-star rating
+</ParamField>
+
+<ParamField path="filterableAttributes" type="array">
+  Fields that can be used for filtering VOD results.
+  
+  **Values:**
+  - `category_id` - Category identifier
+</ParamField>
+
+## Initial Indexing
+
+After configuring MeiliSearch, import your existing data:
+
+### Import All Content
+
+```bash
+php artisan scout:import "App\Models\Series"
+php artisan scout:import "App\Models\VodStream"
+```
+
+### Flush and Re-import
+
+If you need to rebuild indexes from scratch:
+
+```bash
+php artisan scout:flush "App\Models\Series"
+php artisan scout:flush "App\Models\VodStream"
+
+php artisan scout:import "App\Models\Series"
+php artisan scout:import "App\Models\VodStream"
+```
+
+<Info>
+  If `SCOUT_QUEUE=true`, indexing operations will be queued. Run `php artisan queue:work` to process them.
+</Info>
+
+## Automatic Syncing
+
+With Scout configured, models are automatically synced to MeiliSearch when:
+
+- New series or VOD streams are created
+- Existing content is updated
+- Content is deleted
+
+No manual intervention is required for ongoing synchronization.
+
+## Search Configuration
+
+MeiliSearch provides typo-tolerant search out of the box with these features:
+
+- **Typo Tolerance:** Finds results even with spelling mistakes
+- **Prefix Search:** Matches partial words (e.g., "sci" matches "science fiction")
+- **Ranking:** Results are ranked by relevance
+- **Fast:** Sub-50ms search responses
+
+### Searchable Fields
+
+The following fields are searchable in the application:
+
+**Series:**
+- Name/title
+- Plot/description
+- Genre
+- Cast
+- Director
+
+**VOD Streams:**
+- Name/title
+- Description
+- Genre
+- Category
+
+## Performance Tuning
+
+### Queue Configuration
+
+For better performance, enable queued indexing:
+
+```bash .env
+SCOUT_QUEUE=true
+QUEUE_CONNECTION=database  # or redis for better performance
+```
+
+Ensure your queue worker is running:
+
+```bash
+php artisan queue:work
+```
+
+### Database Transactions
+
+Scout waits for database transactions to commit before syncing to MeiliSearch. This is configured in `config/scout.php`:
+
+```php
+'after_commit' => true,
+```
+
+<Info>
+  This prevents discarded data from being synced to the search index.
+</Info>
+
+### Chunk Sizes
+
+Control batch import chunk sizes in `config/scout.php`:
+
+```php
+'chunk' => [
+    'searchable' => 1000,
+    'unsearchable' => 1000,
+],
+```
+
+Increase for faster bulk imports, decrease if you encounter memory issues.
+
+## Monitoring
+
+Check MeiliSearch status and statistics:
+
+```bash
+# Check server health
+curl http://localhost:7700/health
+
+# Get index stats
+curl -H "Authorization: Bearer your-master-key" \
+  http://localhost:7700/indexes/series/stats
+
+curl -H "Authorization: Bearer your-master-key" \
+  http://localhost:7700/indexes/vod_streams/stats
+```
+
+## Troubleshooting
+
+### Connection Failed
+
+If the application can't connect to MeiliSearch:
+
+1. Verify MeiliSearch is running:
+   ```bash
+   curl http://localhost:7700/health
+   ```
+
+2. Check `MEILISEARCH_HOST` matches your MeiliSearch URL
+
+3. Verify `MEILISEARCH_KEY` matches your master key
+
+### Search Not Working
+
+If search returns no results:
+
+1. Check if indexes exist:
+   ```bash
+   curl -H "Authorization: Bearer your-master-key" \
+     http://localhost:7700/indexes
+   ```
+
+2. Verify data is indexed:
+   ```bash
+   php artisan scout:import "App\Models\Series"
+   php artisan scout:import "App\Models\VodStream"
+   ```
+
+3. Check queue is processing (if `SCOUT_QUEUE=true`):
+   ```bash
+   php artisan queue:work
+   ```
+
+### Slow Indexing
+
+If indexing is slow:
+
+1. Enable queue for background processing:
+   ```bash
+   SCOUT_QUEUE=true
+   ```
+
+2. Use Redis instead of database for queue:
+   ```bash
+   QUEUE_CONNECTION=redis
+   ```
+
+3. Run multiple queue workers:
+   ```bash
+   php artisan queue:work &
+   php artisan queue:work &
+   php artisan queue:work &
+   ```
+
+## Production Recommendations
+
+<Warning>
+  For production deployments:
+  
+  1. Always set a strong `MEILI_MASTER_KEY`
+  2. Enable `SCOUT_QUEUE=true` for better performance
+  3. Use HTTPS for remote MeiliSearch instances
+  4. Run queue workers as supervised processes
+  5. Monitor MeiliSearch resource usage
+  6. Set up regular backups of MeiliSearch data
+</Warning>
+
+## Additional Resources
+
+- [MeiliSearch Documentation](https://www.meilisearch.com/docs)
+- [Laravel Scout Documentation](https://laravel.com/docs/scout)
+- [MeiliSearch Cloud](https://www.meilisearch.com/cloud) - Hosted solution

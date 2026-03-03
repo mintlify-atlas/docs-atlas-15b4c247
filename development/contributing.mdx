@@ -1,0 +1,357 @@
+---
+title: Contributing
+description: How to contribute to Lionz IPTV Downloader development
+---
+
+## Getting Started
+
+### Prerequisites
+
+- PHP 8.4 or higher
+- Composer 2.x
+- Bun 1.2.23+ (package manager)
+- aria2 installed and accessible
+- SQLite or MySQL/MariaDB
+- Git
+
+### Initial Setup
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/shekohex/lionz.git
+cd lionz
+```
+
+2. **Install dependencies**
+
+```bash
+# Backend dependencies
+composer install
+
+# Frontend dependencies
+bun install
+```
+
+3. **Configure environment**
+
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+Update `.env` with your local configuration:
+
+```env
+DB_CONNECTION=sqlite
+DB_DATABASE=/absolute/path/to/database.sqlite
+
+# Aria2 configuration
+ARIA2_RPC_URL=http://localhost:6800/jsonrpc
+ARIA2_RPC_SECRET=your-secret
+ARIA2_DOWNLOAD_ROOT=/path/to/downloads
+
+# Optional: Xtream Codes credentials for testing
+XTREAM_CODES_URL=
+XTREAM_CODES_USERNAME=
+XTREAM_CODES_PASSWORD=
+```
+
+4. **Set up database**
+
+```bash
+touch database/database.sqlite
+php artisan migrate
+```
+
+5. **Build frontend assets**
+
+```bash
+bun run build
+```
+
+6. **Start development server**
+
+```bash
+composer dev
+```
+
+This runs 4 concurrent processes:
+- Laravel server (port 8000)
+- Queue worker
+- Log viewer (Pail)
+- Vite dev server (port 5173)
+
+## Development Workflow
+
+### Running the Application
+
+**Standard development:**
+```bash
+composer dev
+```
+
+**SSR development:**
+```bash
+composer dev:ssr
+```
+
+**Individual services:**
+```bash
+php artisan serve           # Laravel server
+php artisan queue:listen    # Queue worker
+php artisan pail            # Log viewer
+bun run dev                 # Vite server
+```
+
+### Code Style
+
+The project uses strict code style enforcement:
+
+**PHP:**
+```bash
+# Format code with Laravel Pint
+vendor/bin/pint
+
+# Static analysis with Larastan
+vendor/bin/phpstan analyse
+```
+
+**JavaScript/TypeScript:**
+```bash
+# Format code
+bun run format
+
+# Check formatting
+bun run format:check
+
+# Lint with ESLint
+bun run lint
+
+# Type check
+bun run types
+```
+
+### IDE Helpers
+
+IDE helper files are automatically generated after `composer update`:
+
+```bash
+php artisan ide-helper:generate  # PHPDoc for facades
+php artisan ide-helper:models    # Model annotations
+```
+
+## Making Changes
+
+### Branch Naming
+
+Use descriptive branch names:
+
+- `feature/auto-episode-scheduling`
+- `fix/download-retry-logic`
+- `refactor/api-integration`
+- `docs/installation-guide`
+
+### Commit Messages
+
+Follow conventional commit format:
+
+```
+feat: add automatic retry for failed downloads
+fix: resolve aria2 connection timeout
+refactor: extract download action to separate class
+docs: update installation instructions
+test: add coverage for download retry policy
+```
+
+### Code Organization
+
+**Action Classes:**
+- Place in `app/Actions/` or subdirectories
+- Use `AsAction` trait for invokable actions
+- Make classes `readonly` when possible
+- Use dependency injection in constructor
+
+Example:
+```php
+final readonly class CreateSignedDirectLink
+{
+    use AsAction;
+
+    public function __construct(
+        private readonly XtreamCodesConfig $config
+    ) {}
+
+    public function __invoke(VodStream $stream): string
+    {
+        // Implementation
+    }
+}
+```
+
+**Controllers:**
+- Keep controllers thin
+- Delegate business logic to Actions
+- Return Inertia responses for SPA pages
+
+**Data Transfer Objects:**
+- Use Spatie Laravel Data in `app/Data/`
+- Define TypeScript types with transformer
+
+**Jobs:**
+- Implement proper failure handling
+- Use exponential backoff for retries
+- Add job middleware when needed
+
+### Frontend Development
+
+**React Components:**
+- Use TypeScript for all components
+- Keep components in `resources/js/components/`
+- Pages go in `resources/js/pages/`
+- Follow existing component patterns
+
+**Styling:**
+- Use Tailwind CSS classes
+- Leverage Radix UI for complex components
+- Maintain dark mode support
+
+**Type Safety:**
+- Define page props interfaces
+- Use TypeScript transformer for Laravel types
+- Run `bun run types` to check
+
+## Testing
+
+See the [Testing Guide](/development/testing) for comprehensive testing instructions.
+
+Quick reference:
+
+```bash
+# Run all tests
+vendor/bin/pest
+
+# Run specific test suite
+vendor/bin/pest --testsuite=Feature
+vendor/bin/pest --testsuite=Unit
+
+# Run specific test file
+vendor/bin/pest tests/Feature/Downloads/DownloadRetryPolicyTest.php
+```
+
+## Pull Request Guidelines
+
+### Before Submitting
+
+1. **Run code quality checks:**
+
+```bash
+vendor/bin/pint              # Format PHP
+bun run format               # Format JS/TS
+vendor/bin/phpstan analyse   # Static analysis
+bun run types                # TypeScript check
+vendor/bin/pest              # Run tests
+```
+
+2. **Update tests:**
+- Add tests for new features
+- Update existing tests for changes
+- Ensure all tests pass
+
+3. **Update documentation:**
+- Add inline code documentation
+- Update relevant .mdx files if needed
+
+### PR Process
+
+1. **Create PR with clear description:**
+- What does this PR do?
+- Why is this change needed?
+- How has it been tested?
+- Screenshots for UI changes
+
+2. **Link related issues:**
+- Use "Closes #123" or "Fixes #456"
+
+3. **Ensure CI passes:**
+- GitHub Actions must pass
+- Address any failing tests or linting issues
+
+4. **Respond to review feedback:**
+- Make requested changes
+- Discuss alternative approaches if needed
+
+### PR Template
+
+```markdown
+## Summary
+- Brief description of changes
+
+## Changes
+- Detailed list of modifications
+
+## Testing
+- How to test these changes
+- Test cases covered
+
+## Screenshots
+(if applicable)
+
+## Checklist
+- [ ] Tests pass
+- [ ] Code formatted (Pint + Prettier)
+- [ ] Types checked
+- [ ] Documentation updated
+```
+
+## Common Tasks
+
+### Adding a New Action
+
+1. Create action class in `app/Actions/`
+2. Use `AsAction` trait
+3. Implement `__invoke()` method
+4. Add tests in `tests/Feature/Actions/`
+
+### Adding a New API Endpoint
+
+1. Create controller method
+2. Add route in appropriate `routes/` file
+3. Create/update Inertia page component
+4. Add TypeScript types
+5. Add feature tests
+
+### Adding a Database Migration
+
+```bash
+php artisan make:migration create_table_name
+```
+
+Edit migration, then:
+
+```bash
+php artisan migrate
+```
+
+### Adding a Queue Job
+
+```bash
+php artisan make:job ProcessSomething
+```
+
+Implement job logic and add tests.
+
+## Getting Help
+
+- Check existing issues on GitHub
+- Review the documentation in `docs/`
+- Examine similar existing code patterns
+- Ask questions in pull request discussions
+
+## Code of Conduct
+
+- Be respectful and constructive
+- Follow project coding standards
+- Test your changes thoroughly
+- Document complex logic
+- Keep pull requests focused and scoped

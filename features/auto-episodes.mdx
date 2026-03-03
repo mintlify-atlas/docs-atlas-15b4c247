@@ -1,0 +1,332 @@
+---
+title: Automatic Episode Monitoring
+description: Automatically download new TV series episodes on a schedule
+---
+
+The Auto-Episodes feature monitors your favorite TV series and automatically downloads new episodes as they become available. Set up custom schedules, select which seasons to monitor, and let the system handle the rest.
+
+## Overview
+
+Automatic episode monitoring scans your series for new episodes and queues them for download based on your configured schedule:
+
+- **Scheduled Scanning**: Daily or weekly checks for new episodes
+- **Season Selection**: Monitor specific seasons or all seasons
+- **Download Limits**: Cap the number of episodes downloaded per scan
+- **Smart Detection**: Tracks which episodes are new since last check
+- **Duplicate Prevention**: Avoids re-downloading existing content
+
+<Info>
+Before enabling auto-episode monitoring, you must add the series to your watchlist.
+</Info>
+
+## Enabling Monitoring
+
+Set up automatic episode monitoring for any series:
+
+<Steps>
+  <Step title="Add to Watchlist">
+    Navigate to the series detail page and add it to your watchlist
+  </Step>
+  <Step title="Configure Monitoring">
+    Click "Enable Monitoring" or access the monitoring settings
+  </Step>
+  <Step title="Choose Schedule">
+    Select daily or weekly schedule with specific times
+  </Step>
+  <Step title="Select Seasons">
+    Choose which seasons to monitor (or select all)
+  </Step>
+  <Step title="Set Download Limit">
+    Configure how many episodes to download per scan
+  </Step>
+  <Step title="Save Configuration">
+    Activate monitoring with your settings
+  </Step>
+</Steps>
+
+## Schedule Configuration
+
+Choose how often the system checks for new episodes:
+
+### Daily Schedule
+
+Run monitoring once per day:
+
+1. Select **Daily** as schedule type
+2. Choose a time of day (e.g., "02:00")
+3. Select your timezone
+4. Monitoring runs every day at the specified time
+
+**Use Case**: Best for actively airing series with frequent releases
+
+### Weekly Schedule
+
+Run monitoring on specific days of the week:
+
+1. Select **Weekly** as schedule type
+2. Choose one or more days (0=Sunday, 1=Monday, etc.)
+3. Set the time for the scan
+4. Select your timezone
+5. Monitoring runs only on selected days at the specified time
+
+**Use Case**: Ideal for series that release episodes on specific days
+
+<Card title="Timezone Support" icon="clock">
+All schedules respect your configured timezone. The system converts your local time to UTC for accurate scheduling across different time zones.
+</Card>
+
+## Season Selection
+
+Control which seasons are monitored:
+
+- **All Seasons**: Monitor every season (leave empty or select all)
+- **Specific Seasons**: Choose individual seasons (e.g., [1, 2, 3])
+- **Latest Season**: Monitor only the most recent season
+- **Multiple Selections**: Select any combination of seasons
+
+### Season Filtering
+
+When configured:
+
+1. Only episodes from selected seasons are considered
+2. New seasons can be added to monitoring later
+3. Unselected seasons are ignored during scans
+4. Updates to season selection take effect on next run
+
+## Download Limits (Per-Run Cap)
+
+Control how many episodes download per monitoring run:
+
+- **Default**: 5 episodes per run (configurable)
+- **Maximum**: 100 episodes per run (system limit)
+- **Purpose**: Prevents overwhelming your system with massive downloads
+- **Overflow**: Excess episodes marked as "deferred" and queued next run
+
+<Note>
+If 10 new episodes are found but your cap is 5, the first 5 will download immediately and the remaining 5 will be marked as pending for the next monitoring run.
+</Note>
+
+## Monitoring Status
+
+Track the state of your monitoring configuration:
+
+### Status Indicators
+
+- **Enabled**: Monitoring is active and scheduled
+- **Disabled**: Monitoring is paused
+- **Next Run**: Scheduled time for next monitoring scan
+- **Last Attempt**: When the last scan occurred
+- **Last Success**: When the last successful scan completed
+- **Status**: Success, Success with Warnings, or Failed
+
+### Run History
+
+Each monitoring run records:
+
+- **Trigger**: Scheduled, Manual (Run Now), or Backfill
+- **Window**: Time range scanned for new episodes
+- **Queued Count**: Episodes successfully added to downloads
+- **Duplicate Count**: Episodes already downloaded (skipped)
+- **Deferred Count**: Episodes delayed due to per-run cap
+- **Error Count**: Episodes that failed to queue
+
+## Manual Actions
+
+Override automatic scheduling with manual controls:
+
+### Run Now
+
+Trigger an immediate monitoring scan:
+
+1. Click **Run Now** on the series detail page
+2. The system performs an immediate check for new episodes
+3. Download queue is updated with any new content
+4. Cooldown period prevents repeated manual runs (default: 5 minutes)
+
+<Tip>
+Use "Run Now" when you know a new episode was just released and don't want to wait for the scheduled scan.
+</Tip>
+
+### Backfill Episodes
+
+Download previously released episodes:
+
+1. Click **Backfill** on the series page
+2. Select number of episodes to backfill (preset options available)
+3. System queues the most recent un-downloaded episodes
+4. Respects per-run cap and season selections
+
+**Backfill Behavior**:
+- Downloads older episodes that were released before monitoring started
+- Processes episodes in chronological order (oldest first)
+- Limited by backfill count and per-run cap (whichever is smaller)
+- Useful when first enabling monitoring on an existing series
+
+## Episode State Tracking
+
+The system tracks each episode's state:
+
+- **Pending**: New episode detected, waiting to download
+- **Queued**: Episode added to download queue
+- **Skipped**: Episode skipped during initial baseline scan
+- **Failed**: Episode failed to queue (will retry next run)
+
+### First Run Behavior
+
+When monitoring is first enabled:
+
+1. All existing episodes are discovered
+2. **Scheduled/Manual**: Existing episodes marked as "skipped" (baseline)
+3. **Backfill**: Existing episodes queued according to backfill count
+4. Subsequent runs only download episodes newer than last successful check
+
+<Info>
+The baseline behavior prevents automatically downloading an entire series when you first enable monitoring. Use backfill to selectively download past episodes.
+</Info>
+
+## Event Tracking
+
+Every monitoring action is logged:
+
+### Event Types
+
+- **Queued**: Episode successfully added to downloads
+- **Duplicate**: Episode already exists in active downloads
+- **Deferred**: Episode delayed due to per-run cap
+- **Error**: Failed to queue episode for download
+
+### Event Metadata
+
+Events include:
+
+- Episode ID, season, and episode number
+- Associated download reference ID
+- Error messages and reasons
+- Timestamps and run ID
+
+## Updating Monitoring Settings
+
+Modify monitoring configuration for active monitors:
+
+1. Navigate to the series detail page
+2. Click **Update Monitoring Settings**
+3. Change schedule, seasons, or per-run cap
+4. Save changes
+5. Next run time is recalculated based on new schedule
+
+<Steps>
+  <Step title="Access Settings">
+    Open monitoring settings for the series
+  </Step>
+  <Step title="Modify Configuration">
+    Update schedule type, time, seasons, or download limits
+  </Step>
+  <Step title="Save Changes">
+    Settings take effect immediately; next run time updates
+  </Step>
+</Steps>
+
+## Disabling Monitoring
+
+Stop automatic episode monitoring:
+
+1. Navigate to the series detail page
+2. Click **Disable Monitoring**
+3. Choose whether to remove from watchlist:
+   - **Keep in Watchlist**: Stops monitoring but maintains watchlist entry
+   - **Remove from Watchlist**: Disables monitoring and removes from watchlist
+4. Monitoring stops and next run time is cleared
+
+## Preset Options
+
+The system provides preset configurations:
+
+### Preset Times
+
+Common schedule times (configured in `auto_episodes.preset_times`):
+- Early morning (e.g., "02:00")
+- Late night (e.g., "23:00")
+- Custom times as configured by administrator
+
+### Preset Backfill Counts
+
+Common backfill quantities (configured in `auto_episodes.backfill_preset_counts`):
+- 5 episodes
+- 10 episodes
+- 25 episodes
+- 50 episodes
+
+<Note>
+Administrators can customize preset options through configuration files.
+</Note>
+
+## Technical Details
+
+### Monitoring Job
+
+The system uses Laravel jobs to process monitoring:
+
+- **Job**: ScanSeriesForNewEpisodes
+- **Trigger**: Scheduled task, manual run, or backfill request
+- **Processing**: Fetches series info, syncs episodes, queues downloads
+- **Error Handling**: Catches failures and records error status
+
+### Next Run Calculation
+
+The next run time is computed based on schedule type:
+
+- **Daily**: Next occurrence of specified time (today or tomorrow)
+- **Weekly**: Next occurrence of selected weekday and time
+- **Timezone Conversion**: User timezone converted to UTC for storage
+- **Update Triggers**: Recalculated after successful run or settings change
+
+### Episode Synchronization
+
+During each monitoring run:
+
+1. Fetch latest series information from IPTV provider
+2. Extract episodes matching monitored seasons
+3. Compare against previously tracked episodes
+4. Identify new episodes added since last successful check
+5. Queue new episodes (up to per-run cap)
+6. Update episode state and timestamps
+
+<Card title="Smart Detection" icon="radar">
+The system compares the current episode list against the last successful scan timestamp, ensuring only truly new episodes are downloaded.
+</Card>
+
+## Integration with Downloads
+
+Auto-episode monitoring integrates with the download system:
+
+- **Download Creation**: Uses same download flow as manual downloads
+- **Owner Assignment**: Downloads belong to the monitoring user
+- **Duplicate Detection**: Checks for active downloads before queuing
+- **Download Tracking**: Links episode state to download reference
+- **Status Updates**: Episode state reflects download success or failure
+
+## Troubleshooting
+
+### Monitoring Not Running
+
+- Verify monitoring is enabled
+- Check next run time is in the future
+- Ensure scheduled tasks are running (Laravel scheduler)
+- Review last attempt status for errors
+
+### Episodes Not Downloading
+
+- Check per-run cap hasn't been reached
+- Verify seasons are in monitored seasons list
+- Review event log for duplicate or error events
+- Confirm episodes are available from IPTV provider
+
+### Duplicate Episode Detection
+
+- System detects active downloads for same episode
+- Prevents re-downloading content already in queue
+- Check downloads page for existing downloads
+
+<Tip>
+Use the monitoring event log to diagnose why specific episodes didn't download. Each episode has an associated event explaining the outcome.
+</Tip>

@@ -1,0 +1,400 @@
+---
+title: Sync Media
+description: Actions for synchronizing content from Xtream Codes API
+---
+
+## SyncMedia
+
+Synchronizes all media content (series and VOD streams) from the Xtream Codes API.
+
+### Signature
+
+```php
+App\Actions\SyncMedia::run(): void
+```
+
+### Parameters
+
+No parameters required.
+
+### Process Overview
+
+The sync process follows these steps:
+
+1. **Remove from search index** - Clear existing search entries
+2. **Delete existing data** - Remove all series and VOD streams from database
+3. **Fetch series** - Retrieve all series from Xtream Codes API
+4. **Upsert series** - Insert/update series in chunks of 1,000
+5. **Fetch VOD streams** - Retrieve all VOD streams from API
+6. **Upsert VOD streams** - Insert/update VOD streams in chunks of 1,000
+7. **Bust DTO cache** - Invalidate cached API responses
+8. **Rebuild search index** - Make all content searchable
+
+### Example
+
+```php
+use App\Actions\SyncMedia;
+
+// Run full media sync
+SyncMedia::run();
+```
+
+### Implementation Details
+
+#### Search Index Management
+
+Before syncing, the action safely removes items from the search index:
+
+```php
+private function removeAllFromSearchSafely(): void
+{
+    try {
+        Log::debug('Removing items from search index');
+        VodStream::removeAllFromSearch();
+        Series::removeAllFromSearch();
+    } catch (Throwable $exception) {
+        Log::warning('Skipping search index cleanup', [
+            'error' => $exception->getMessage(),
+        ]);
+    }
+}
+```
+
+#### Data Deletion
+
+All existing data is cleared before syncing:
+
+```php
+Log::debug('Deleting all existing series');
+Series::query()->delete();
+
+Log::debug('Deleting all existing VOD streams');
+VodStream::query()->delete();
+```
+
+#### Series Synchronization
+
+Series are fetched and upserted in chunks:
+
+```php
+$series = $this->connector->send(new GetSeriesRequest)->dtoOrFail();
+
+foreach (array_chunk($series, 1000) as $chunk) {
+    Series::query()->upsert(
+        $chunk,
+        ['series_id'],
+        [
+            'num', 'name', 'cover', 'plot', 'cast',
+            'director', 'genre', 'releaseDate', 'last_modified',
+            'rating', 'rating_5based', 'backdrop_path',
+            'youtube_trailer', 'episode_run_time', 'category_id',
+        ]
+    );
+}
+```
+
+#### VOD Stream Synchronization
+
+VOD streams follow a similar pattern:
+
+```php
+$vodStreams = $this->connector->send(new GetVodStreamsRequest)->dtoOrFail();
+
+foreach (array_chunk($vodStreams, 1000) as $chunk) {
+    VodStream::query()->upsert(
+        $chunk,
+        ['stream_id'],
+        [
+            'num', 'name', 'stream_type', 'stream_icon',
+            'rating', 'rating_5based', 'added', 'is_adult',
+            'category_id', 'container_extension', 'custom_sid',
+            'direct_source',
+        ]
+    );
+}
+```
+
+#### Cache Invalidation
+
+The DTO cache namespace is incremented to invalidate cached responses:
+
+```php
+private function bustXtreamDtoCacheNamespace(): void
+{
+    $cache = Cache::store();
+    $key = XtreamCodesConnector::DTO_CACHE_NAMESPACE_KEY;
+    $version = $cache->increment($key);
+
+    if ($version === false) {
+        $cache->forever($key, ((int) $cache->get($key, 0)) + 1);
+    }
+}
+```
+
+#### Search Index Rebuild
+
+After sync, content is made searchable in batches:
+
+```php
+private function makeAllSearchableSafely(): void
+{
+    try {
+        Log::debug('Marking series as searchable');
+        Series::makeAllSearchable(3000);
+        
+        Log::debug('Marking VOD streams as searchable');
+        VodStream::makeAllSearchable(3000);
+    } catch (Throwable $exception) {
+        Log::warning('Skipping search indexing', [
+            'error' => $exception->getMessage(),
+        ]);
+    }
+}
+```
+
+---
+
+## SyncCategories
+
+Synchronizes category information from Xtream Codes API and manages category assignments.
+
+### Signature
+
+```php
+App\Actions\SyncCategories::run(
+    bool $forceEmptyVod = false,
+    bool $forceEmptySeries = false,
+    ?int $requestedByUserId = null
+): App\Models\CategorySyncRun
+```
+
+### Parameters
+
+<ParamField path="forceEmptyVod" type="bool" default="false">
+  Allow applying empty VOD category list (destructive operation)
+</ParamField>
+
+<ParamField path="forceEmptySeries" type="bool" default="false">
+  Allow applying empty series category list (destructive operation)
+</ParamField>
+
+<ParamField path="requestedByUserId" type="int|null" default="null">
+  User ID who initiated the sync (for audit tracking)
+</ParamField>
+
+### Returns
+
+<ResponseField name="CategorySyncRun" type="CategorySyncRun">
+  The sync run record with status and summary information:
+  
+  - `status`: Success, SuccessWithWarnings, or Failed
+  - `summary`: Counts of created, updated, removed categories
+  - `top_issues`: Array of warning/error messages (max 20)
+  - `started_at`, `finished_at`: Timestamps
+</ResponseField>
+
+### Example
+
+```php
+use App\Actions\SyncCategories;
+
+// Normal sync
+$run = SyncCategories::run();
+
+if ($run->status === CategorySyncRunStatus::Success) {
+    echo "Synced: {$run->summary['created']} created, "
+         . "{$run->summary['updated']} updated";
+}
+
+// Force sync even if API returns empty categories
+$run = SyncCategories::run(
+    forceEmptyVod: true,
+    forceEmptySeries: true,
+    requestedByUserId: auth()->id()
+);
+```
+
+### Process Overview
+
+1. **Create sync run record** - Track sync progress
+2. **Ensure system categories** - Create "Uncategorized" categories
+3. **Fetch VOD categories** - Retrieve from Xtream Codes API
+4. **Fetch series categories** - Retrieve from Xtream Codes API
+5. **Apply VOD categories** - Create/update categories, mark as in_vod
+6. **Apply series categories** - Create/update categories, mark as in_series
+7. **Cleanup missing categories** - Remove categories no longer in both sources
+8. **Move orphaned content** - Reassign content to "Uncategorized"
+9. **Remap content** - Restore content to valid categories when possible
+10. **Finalize run** - Update run status and summary
+
+### Summary Metrics
+
+The sync run returns the following metrics:
+
+```php
+[
+    'created' => 15,                      // New categories created
+    'updated' => 42,                      // Existing categories updated
+    'removed' => 3,                       // Categories deleted
+    'moved_to_uncategorized_vod' => 127,  // VOD streams moved to Uncategorized
+    'moved_to_uncategorized_series' => 8, // Series moved to Uncategorized
+    'remapped_from_uncategorized_vod' => 100, // VOD streams restored
+    'remapped_from_uncategorized_series' => 5, // Series restored
+]
+```
+
+### System Categories
+
+Two special categories are automatically maintained:
+
+**Uncategorized (VOD)**  
+`provider_id`: `"__uncategorized_vod"`  
+`in_vod`: `true`  
+`in_series`: `false`  
+`is_system`: `true`
+
+**Uncategorized (Series)**  
+`provider_id`: `"__uncategorized_series"`  
+`in_vod`: `false`  
+`in_series`: `true`  
+`is_system`: `true`
+
+### Error Handling
+
+#### Empty Category Lists
+
+If the API returns an empty category list, the sync will warn and skip applying changes unless forced:
+
+```php
+if ($categories === [] && ! $forceEmpty) {
+    $this->addIssue(
+        $issues,
+        'VOD categories returned empty list; '
+        . 'explicit confirmation is required to apply destructive changes'
+    );
+}
+```
+
+#### Partial Failures
+
+If one source fails but the other succeeds, the run status is `SuccessWithWarnings`:
+
+```php
+private function resolveStatus(
+    array $issues,
+    bool $vodSucceeded,
+    bool $seriesSucceeded
+): CategorySyncRunStatus {
+    if (! $vodSucceeded && ! $seriesSucceeded) {
+        return CategorySyncRunStatus::Failed;
+    }
+    
+    if ($issues !== []) {
+        return CategorySyncRunStatus::SuccessWithWarnings;
+    }
+    
+    return CategorySyncRunStatus::Success;
+}
+```
+
+### Content Migration
+
+#### Moving to Uncategorized
+
+Content is moved to "Uncategorized" if its category is:
+- `null` or empty string
+- Not in the valid provider ID list
+
+The previous category is preserved for potential restoration:
+
+```php
+$modelClass::query()
+    ->where($idColumn, $row->{$idColumn})
+    ->update([
+        'category_id' => $uncategorizedProviderId,
+        'previous_category_id' => $previousCategoryId,
+    ]);
+```
+
+#### Remapping from Uncategorized
+
+If a previously valid category becomes available again, content is automatically restored:
+
+```php
+$modelClass::query()
+    ->select([$idColumn, 'previous_category_id'])
+    ->where('category_id', $uncategorizedProviderId)
+    ->whereNotNull('previous_category_id')
+    ->whereIn('previous_category_id', $validProviderIds)
+    ->chunkById(500, function ($rows) use ($modelClass, $idColumn, &$remapped): void {
+        foreach ($rows as $row) {
+            $remapped += $modelClass::query()
+                ->where($idColumn, $row->{$idColumn})
+                ->update([
+                    'category_id' => $row->previous_category_id,
+                    'previous_category_id' => null,
+                ]);
+        }
+    });
+```
+
+---
+
+## Related Jobs
+
+### RefreshMediaContents
+
+Scheduled job that triggers full media synchronization.
+
+**Queue**: Default  
+**Schedule**: Configured via settings  
+**Unique**: No
+
+```php
+use App\Jobs\RefreshMediaContents;
+
+RefreshMediaContents::dispatch();
+```
+
+### SyncCategories (Job)
+
+Job wrapper for the SyncCategories action.
+
+**Queue**: Default  
+**Schedule**: Can be triggered manually or on schedule
+
+```php
+use App\Jobs\SyncCategories;
+
+SyncCategories::dispatch(
+    forceEmptyVod: false,
+    forceEmptySeries: false,
+    requestedByUserId: auth()->id()
+);
+```
+
+---
+
+## API Integration
+
+### Xtream Codes API Requests
+
+**GetSeriesRequest**  
+Fetches all series from the Xtream Codes API.
+
+**GetVodStreamsRequest**  
+Fetches all VOD streams from the Xtream Codes API.
+
+**GetSeriesCategoriesRequest**  
+Fetches series category definitions.
+
+**GetVodCategoriesRequest**  
+Fetches VOD category definitions.
+
+### Connector Configuration
+
+The `XtreamCodesConnector` manages:
+- Base URL configuration
+- Authentication (username/password)
+- DTO caching with namespace versioning
+- Request/response handling

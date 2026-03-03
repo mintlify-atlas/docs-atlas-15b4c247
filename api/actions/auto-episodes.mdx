@@ -1,0 +1,658 @@
+---
+title: Auto Episodes
+description: Actions for automatic episode monitoring and downloading
+---
+
+## Overview
+
+The Auto Episodes system monitors TV series for new episodes and automatically queues them for download. It supports flexible scheduling (hourly, daily, weekly) and handles duplicate detection, error recovery, and download caps.
+
+---
+
+## ScanSeriesForNewEpisodes
+
+Scans a series monitor for new episodes and queues them for download.
+
+### Signature
+
+```php
+App\Actions\AutoEpisodes\ScanSeriesForNewEpisodes::handle(
+    int $monitorId,
+    SeriesMonitorRunTrigger $trigger = SeriesMonitorRunTrigger::Scheduled,
+    array $options = []
+): void
+```
+
+### Parameters
+
+<ParamField path="monitorId" type="int" required>
+  The ID of the SeriesMonitor to scan
+</ParamField>
+
+<ParamField path="trigger" type="SeriesMonitorRunTrigger" default="Scheduled">
+  How the scan was triggered:
+  - `Scheduled` - Automatic scheduled run
+  - `Manual` - User-initiated scan
+  - `Backfill` - Historical episode backfill
+</ParamField>
+
+<ParamField path="options" type="array" default="[]">
+  Additional options:
+  - `backfill_count` (int) - Override per-run cap for backfill operations
+</ParamField>
+
+### Process Overview
+
+1. **Load monitor** - Fetch SeriesMonitor with user and series relationships
+2. **Create run record** - Track scan progress and results
+3. **Fetch series info** - Get latest episode data from Xtream Codes API
+4. **Collect episodes** - Filter by monitored seasons
+5. **Sync episodes** - Update episode state tracking
+6. **Handle baseline** - Skip all episodes on first run (unless backfill)
+7. **Queue candidates** - Download pending/failed episodes up to cap
+8. **Update monitor** - Set next run time and status
+9. **Finalize run** - Record metrics and completion status
+
+### Example
+
+```php
+use App\Actions\AutoEpisodes\ScanSeriesForNewEpisodes;
+use App\Enums\AutoEpisodes\SeriesMonitorRunTrigger;
+
+// Scheduled scan (automatic)
+ScanSeriesForNewEpisodes::run(
+    monitorId: 123,
+    trigger: SeriesMonitorRunTrigger::Scheduled
+);
+
+// Manual scan (user-initiated)
+ScanSeriesForNewEpisodes::run(
+    monitorId: 123,
+    trigger: SeriesMonitorRunTrigger::Manual
+);
+
+// Backfill with custom limit
+ScanSeriesForNewEpisodes::run(
+    monitorId: 123,
+    trigger: SeriesMonitorRunTrigger::Backfill,
+    options: ['backfill_count' => 5]
+);
+```
+
+### Implementation Details
+
+#### Episode Collection
+
+Episodes are collected from the series info and filtered by monitored seasons:
+
+```php
+private function collectEpisodes(
+    SeriesInformation $seriesInfo,
+    mixed $monitoredSeasons
+): array {
+    $seasonFilter = [];
+    if (is_array($monitoredSeasons)) {
+        foreach ($monitoredSeasons as $season) {
+            $seasonFilter[(int) $season] = true;
+        }
+    }
+
+    $episodes = [];
+    foreach ($seriesInfo->seasonsWithEpisodes as $seasonEpisodes) {
+        foreach ($seasonEpisodes as $episode) {
+            if (! $episode instanceof Episode) {
+                continue;
+            }
+            if ($seasonFilter !== [] && ! isset($seasonFilter[$episode->season])) {
+                continue;
+            }
+            $episodes[] = $episode;
+        }
+    }
+
+    return $episodes;
+}
+```
+
+#### Episode Synchronization
+
+Episode state is tracked in the `series_monitor_episodes` table:
+
+```php
+private function syncEpisodes(
+    SeriesMonitor $monitor,
+    array $episodes,
+    CarbonImmutable $windowEndAt
+): array {
+    $syncedEpisodes = [];
+
+    foreach ($episodes as $episode) {
+        $episodeState = SeriesMonitorEpisode::query()->firstOrNew([
+            'monitor_id' => $monitor->id,
+            'episode_id' => $episode->id,
+        ]);
+
+        if (! $episodeState->exists) {
+            $episodeState->state = SeriesMonitorEpisode::STATE_PENDING;
+            $episodeState->first_seen_at = $windowEndAt;
+        }
+
+        $episodeState->season = $episode->season;
+        $episodeState->episode_num = $episode->episodeNum;
+        $episodeState->last_seen_at = $windowEndAt;
+        $episodeState->save();
+
+        $syncedEpisodes[] = [
+            'episode' => $episode,
+            'state' => $episodeState,
+        ];
+    }
+
+    return $syncedEpisodes;
+}
+```
+
+#### Baseline Handling
+
+On the first successful run, all episodes are marked as skipped to avoid downloading the entire series:
+
+```php
+if ($monitor->last_successful_check_at === null 
+    && $trigger !== SeriesMonitorRunTrigger::Backfill
+) {
+    $this->markBaselineAsSkipped($syncedEpisodes);
+    // ... finalize with 0 queued
+    return;
+}
+```
+
+#### Per-Run Cap
+
+The number of episodes queued per run is limited by the monitor's `per_run_cap`:
+
+```php
+private function resolvePerRunCap(
+    SeriesMonitor $monitor,
+    SeriesMonitorRunTrigger $trigger,
+    array $options
+): int {
+    $cap = max(0, (int) $monitor->per_run_cap);
+
+    if ($trigger !== SeriesMonitorRunTrigger::Backfill) {
+        return $cap;
+    }
+
+    $backfillCount = $options['backfill_count'] ?? null;
+    if (is_int($backfillCount) || is_string($backfillCount)) {
+        $normalizedBackfillCount = (int) $backfillCount;
+        if ($normalizedBackfillCount > 0) {
+            return min($cap, $normalizedBackfillCount);
+        }
+    }
+
+    return $cap;
+}
+```
+
+#### Episode Ordering
+
+Candidates are sorted by season and episode number:
+
+```php
+usort($candidates, static function (array $left, array $right): int {
+    $seasonComparison = $left['episode']->season <=> $right['episode']->season;
+    if ($seasonComparison !== 0) {
+        return $seasonComparison;
+    }
+    return $left['episode']->episodeNum <=> $right['episode']->episodeNum;
+});
+```
+
+### Run Metrics
+
+Each scan produces the following metrics:
+
+- `queued_count` - Episodes successfully queued for download
+- `duplicate_count` - Episodes already downloaded
+- `deferred_count` - Episodes exceeding per-run cap
+- `error_count` - Episodes that failed to queue
+
+### Run Status
+
+- `Success` - All episodes processed without errors or deferrals
+- `SuccessWithWarnings` - Some episodes were deferred or failed
+- `Failed` - Scan failed with exception
+
+---
+
+## QueueEpisodeDownload
+
+Queues a single episode for download with duplicate detection and concurrency protection.
+
+### Signature
+
+```php
+App\Actions\AutoEpisodes\QueueEpisodeDownload::handle(
+    SeriesMonitor $monitor,
+    Episode $episode,
+    SeriesInformation $seriesInfo
+): array
+```
+
+### Parameters
+
+<ParamField path="monitor" type="SeriesMonitor" required>
+  The series monitor that owns this episode
+</ParamField>
+
+<ParamField path="episode" type="Episode" required>
+  The episode to queue (from Xtream Codes API)
+</ParamField>
+
+<ParamField path="seriesInfo" type="SeriesInformation" required>
+  Series information for generating download paths
+</ParamField>
+
+### Returns
+
+<ResponseField name="result" type="array">
+  Array with `status` key and additional data:
+  
+  **On Success (`STATUS_QUEUED`)**:
+  - `status`: `"queued"`
+  - `media_download_ref_id`: Database ID
+  - `downloadable_id`: Normalized episode ID
+  - `episode_id`: Original Xtream episode ID
+  
+  **On Duplicate (`STATUS_DUPLICATE`)**:
+  - `status`: `"duplicate"`
+  - `reason`: Why it was marked duplicate
+  - `media_download_ref_id`: Existing download ID (if available)
+  - `downloadable_id`: Normalized episode ID
+  
+  **On Error (`STATUS_ERROR`)**:
+  - `status`: `"error"`
+  - `reason`: Error code/category
+  - `message`: Human-readable error message
+  - `episode_id`: Original episode ID
+</ResponseField>
+
+### Example
+
+```php
+use App\Actions\AutoEpisodes\QueueEpisodeDownload;
+
+$result = QueueEpisodeDownload::run($monitor, $episode, $seriesInfo);
+
+switch ($result['status']) {
+    case QueueEpisodeDownload::STATUS_QUEUED:
+        echo "Queued download #{$result['media_download_ref_id']}";
+        break;
+        
+    case QueueEpisodeDownload::STATUS_DUPLICATE:
+        echo "Already downloading: {$result['reason']}";
+        break;
+        
+    case QueueEpisodeDownload::STATUS_ERROR:
+        echo "Error: {$result['message']}";
+        break;
+}
+```
+
+### Implementation Details
+
+#### Episode ID Normalization
+
+Episode IDs from Xtream Codes are validated and normalized to unsigned 32-bit integers:
+
+```php
+private function normalizeEpisodeId(string $episodeId): ?int
+{
+    if (! preg_match('/^\d+$/', $episodeId)) {
+        return null;
+    }
+
+    $normalized = ltrim($episodeId, '0');
+
+    if ($normalized === '' || strlen($normalized) > 10) {
+        return null;
+    }
+
+    if (strlen($normalized) === 10 
+        && strcmp($normalized, (string) self::UNSIGNED_INT32_MAX) > 0
+    ) {
+        return null;
+    }
+
+    $downloadableId = (int) $normalized;
+
+    if ($downloadableId <= 0) {
+        return null;
+    }
+
+    return $downloadableId;
+}
+```
+
+#### Concurrency Protection
+
+A cache lock prevents duplicate downloads of the same episode:
+
+```php
+$lockKey = sprintf(
+    'auto:episodes:queue:user:%d:series:%d:episode:%d',
+    $userId,
+    $seriesId,
+    $downloadableId
+);
+
+return Cache::lock($lockKey, 120)->block(5, function () {
+    // Check for existing download
+    // Queue new download if none exists
+});
+```
+
+#### Duplicate Detection
+
+Before queuing, check if the episode is already downloaded:
+
+```php
+$existingRef = MediaDownloadRef::query()
+    ->where('user_id', $monitor->user_id)
+    ->where('media_type', Series::class)
+    ->where('media_id', $monitor->series_id)
+    ->where('downloadable_id', $downloadableId)
+    ->first();
+
+if ($existingRef !== null) {
+    return [
+        'status' => self::STATUS_DUPLICATE,
+        'reason' => 'existing_download_ref',
+        'media_download_ref_id' => $existingRef->id,
+    ];
+}
+```
+
+#### Download Creation
+
+If no duplicate exists, create the download:
+
+```php
+$url = CreateXtreamcodesDownloadUrl::run($episode);
+$gid = DownloadMedia::run($url, [
+    'out' => CreateDownloadOut::run($seriesInfo, $episode)
+]);
+
+$downloadRef = MediaDownloadRef::fromSeriesAndEpisode(
+    $gid,
+    $series,
+    $episode,
+    $monitor->user_id
+);
+$downloadRef->downloadable_id = $downloadableId;
+$downloadRef->saveOrFail();
+```
+
+---
+
+## ComputeNextRunAt
+
+Calculates the next scheduled run time for a series monitor.
+
+### Signature
+
+```php
+App\Actions\AutoEpisodes\ComputeNextRunAt::run(
+    CarbonImmutable $nowUtc,
+    string $timezone,
+    MonitorScheduleType $scheduleType,
+    ?string $dailyTime = null,
+    array $weeklyDays0Sun = [],
+    ?string $weeklyTime = null
+): CarbonImmutable
+```
+
+### Parameters
+
+<ParamField path="nowUtc" type="CarbonImmutable" required>
+  Current time in UTC
+</ParamField>
+
+<ParamField path="timezone" type="string" required>
+  User's timezone (e.g., "America/New_York")
+</ParamField>
+
+<ParamField path="scheduleType" type="MonitorScheduleType" required>
+  Schedule frequency: `Hourly`, `Daily`, or `Weekly`
+</ParamField>
+
+<ParamField path="dailyTime" type="string|null" default="null">
+  Time for daily schedule (HH:MM format, 24-hour). Must be in `config('auto_episodes.preset_times')`.
+</ParamField>
+
+<ParamField path="weeklyDays0Sun" type="array" default="[]">
+  Days of week for weekly schedule (0=Sunday, 6=Saturday)
+</ParamField>
+
+<ParamField path="weeklyTime" type="string|null" default="null">
+  Time for weekly schedule (HH:MM format, 24-hour). Must be in preset times.
+</ParamField>
+
+### Returns
+
+<ResponseField name="nextRunAt" type="CarbonImmutable">
+  The next scheduled run time in UTC
+</ResponseField>
+
+### Example
+
+```php
+use App\Actions\AutoEpisodes\ComputeNextRunAt;
+use App\Enums\AutoEpisodes\MonitorScheduleType;
+use Carbon\CarbonImmutable;
+
+// Hourly schedule
+$nextRun = ComputeNextRunAt::run(
+    nowUtc: now()->toImmutable(),
+    timezone: 'America/New_York',
+    scheduleType: MonitorScheduleType::Hourly
+);
+// Returns: Next hour boundary in UTC
+
+// Daily at 9:00 PM
+$nextRun = ComputeNextRunAt::run(
+    nowUtc: now()->toImmutable(),
+    timezone: 'America/New_York',
+    scheduleType: MonitorScheduleType::Daily,
+    dailyTime: '21:00'
+);
+
+// Weekly on Mondays and Thursdays at 9:00 PM
+$nextRun = ComputeNextRunAt::run(
+    nowUtc: now()->toImmutable(),
+    timezone: 'America/New_York',
+    scheduleType: MonitorScheduleType::Weekly,
+    weeklyDays0Sun: [1, 4], // Monday, Thursday
+    weeklyTime: '21:00'
+);
+```
+
+### Schedule Types
+
+#### Hourly
+
+Runs at the start of every hour:
+
+```php
+MonitorScheduleType::Hourly => $localNow->startOfHour()->addHour()
+```
+
+#### Daily
+
+Runs at a specific time each day:
+
+```php
+private function computeDailyNextRunAt(
+    CarbonImmutable $localNow,
+    string $time
+): CarbonImmutable {
+    [$hour, $minute] = $this->parseTime($time);
+    $candidate = $localNow->setTime($hour, $minute, 0);
+    
+    if ($candidate->lessThanOrEqualTo($localNow)) {
+        return $candidate->addDay();
+    }
+    
+    return $candidate;
+}
+```
+
+#### Weekly
+
+Runs on specific days at a specific time. Finds the nearest upcoming occurrence:
+
+```php
+private function computeWeeklyNextRunAt(
+    CarbonImmutable $localNow,
+    array $days0Sun,
+    string $time
+): CarbonImmutable {
+    [$hour, $minute] = $this->parseTime($time);
+    $nextRunAt = null;
+
+    foreach ($days0Sun as $dayOfWeek) {
+        $dayOffset = ($dayOfWeek - $localNow->dayOfWeek + 7) % 7;
+        $candidate = $localNow->addDays($dayOffset)->setTime($hour, $minute, 0);
+
+        if ($candidate->lessThanOrEqualTo($localNow)) {
+            $candidate = $candidate->addWeek();
+        }
+
+        if ($nextRunAt === null || $candidate->lessThan($nextRunAt)) {
+            $nextRunAt = $candidate;
+        }
+    }
+
+    return $nextRunAt;
+}
+```
+
+### Preset Times
+
+Times must be from the configured preset list in `config/auto_episodes.php`:
+
+```php
+'preset_times' => [
+    '00:00', '03:00', '06:00', '09:00',
+    '12:00', '15:00', '18:00', '21:00',
+],
+```
+
+---
+
+## Related Jobs
+
+### DispatchDueMonitors
+
+Finds monitors with `next_run_at <= now()` and dispatches scan jobs.
+
+**Queue**: Default  
+**Schedule**: Every minute  
+**Unique**: Yes (50 seconds)  
+**Dispatch Limit**: 100 monitors per run
+
+```php
+use App\Jobs\AutoEpisodes\DispatchDueMonitors;
+
+DispatchDueMonitors::dispatch();
+```
+
+**Implementation**:
+
+```php
+public function handle(): void
+{
+    $dueMonitorIds = SeriesMonitor::query()
+        ->select('series_monitors.id')
+        ->join('users', 'users.id', '=', 'series_monitors.user_id')
+        ->where('series_monitors.enabled', true)
+        ->whereNotNull('series_monitors.next_run_at')
+        ->where('series_monitors.next_run_at', '<=', now())
+        ->whereNull('users.auto_episodes_paused_at')
+        ->orderBy('series_monitors.next_run_at')
+        ->limit(self::DISPATCH_LIMIT)
+        ->pluck('series_monitors.id');
+
+    foreach ($dueMonitorIds as $monitorId) {
+        RunMonitorScan::dispatch(
+            (int) $monitorId,
+            SeriesMonitorRunTrigger::Scheduled
+        );
+    }
+}
+```
+
+### RunMonitorScan
+
+Executes a series scan with concurrency protection.
+
+**Queue**: Default  
+**Lock Duration**: 300 seconds  
+**Tries**: 1
+
+```php
+use App\Jobs\AutoEpisodes\RunMonitorScan;
+use App\Enums\AutoEpisodes\SeriesMonitorRunTrigger;
+
+RunMonitorScan::dispatch(
+    monitorId: 123,
+    trigger: SeriesMonitorRunTrigger::Manual,
+    options: ['backfill_count' => 10]
+);
+```
+
+**Lock Key Format**:
+
+```php
+sprintf('auto:episodes:monitor:%d', $monitorId)
+```
+
+---
+
+## Episode States
+
+Episodes tracked by monitors can be in one of these states:
+
+**`STATE_PENDING`**  
+Episode is new and ready to be queued.
+
+**`STATE_QUEUED`**  
+Episode has been queued for download.
+
+**`STATE_SKIPPED`**  
+Episode was part of the baseline and skipped.
+
+**`STATE_FAILED`**  
+Episode download failed and can be retried.
+
+---
+
+## Event Types
+
+Each episode action generates a `SeriesMonitorEvent` with one of these types:
+
+**`Queued`**  
+Episode was successfully queued for download.  
+Meta: `media_download_ref_id`
+
+**`Duplicate`**  
+Episode was already downloaded or queued.  
+Meta: `media_download_ref_id`, `downloadable_id`
+
+**`Deferred`**  
+Episode exceeded per-run cap and will be processed later.  
+Meta: `per_run_cap`
+
+**`Error`**  
+Episode failed to queue due to an error.  
+Meta: `message`, `raw_episode_id`

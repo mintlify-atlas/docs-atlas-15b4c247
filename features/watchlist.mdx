@@ -1,0 +1,179 @@
+---
+title: Watchlist
+description: Keep track of your favorite movies and series for easy access
+---
+
+The Watchlist feature allows you to bookmark and organize your favorite movies and TV series. Mark content you want to watch later or keep track of series you're actively following.
+
+## Adding to Watchlist
+
+You can add both movies and series to your watchlist:
+
+### From Movie Details
+
+1. Navigate to any movie's detail page
+2. Click the **Add to Watchlist** button
+3. The movie is instantly added to your watchlist
+4. A watchlist indicator appears on the movie
+
+### From Series Details
+
+1. Open any series detail page
+2. Click the **Add to Watchlist** button
+3. The series is added to your watchlist
+4. Watchlist status is visible on the series page
+
+<Info>
+Adding a series to your watchlist is required before you can enable automatic episode monitoring.
+</Info>
+
+## Viewing Your Watchlist
+
+Access your complete watchlist from the main navigation:
+
+1. Click **Watchlist** in the menu
+2. View all your bookmarked content in one place
+3. Use filters to show only movies or only series
+
+### Watchlist Display
+
+Each watchlist item shows:
+
+- **Cover Art**: Movie poster or series cover image
+- **Title**: Full name of the content
+- **Type**: Movie or Series indicator
+- **Date Added**: When you added it to your watchlist (relative time)
+- **Quick Actions**: Remove button and link to details page
+
+## Filtering Your Watchlist
+
+Use the filter controls to organize your watchlist:
+
+- **All**: Shows both movies and series (default)
+- **Movies**: Displays only movies
+- **Series**: Displays only TV series
+
+Filters are applied instantly and preserve your selection in the URL.
+
+<Steps>
+  <Step title="Browse Content">
+    Navigate through movies or series to find content you want to track
+  </Step>
+  <Step title="Add to Watchlist">
+    Click the "Add to Watchlist" button on the detail page
+  </Step>
+  <Step title="View Your Watchlist">
+    Access your watchlist from the main menu to see all bookmarked content
+  </Step>
+  <Step title="Filter and Manage">
+    Use filters to organize by type and remove items you've finished watching
+  </Step>
+</Steps>
+
+## Removing from Watchlist
+
+You can remove content from your watchlist in two ways:
+
+### From Watchlist Page
+
+1. Navigate to your Watchlist
+2. Find the item you want to remove
+3. Click the **Remove** button
+4. The item is immediately removed from your list
+
+### From Content Detail Page
+
+1. Open the movie or series detail page
+2. Click the **Remove from Watchlist** button
+3. The content is removed and the button changes back to "Add to Watchlist"
+
+<Note>
+Removing a series from your watchlist while automatic episode monitoring is enabled will prompt you to disable monitoring first, or remove both simultaneously.
+</Note>
+
+## Watchlist Indicators
+
+When browsing content, watchlist indicators help you identify bookmarked items:
+
+- **In Watchlist Badge**: Visual indicator on content cards
+- **Button State**: "Add to Watchlist" vs "Remove from Watchlist" on detail pages
+- **Quick Reference**: See at a glance which content you're tracking
+
+## Watchlist and Auto-Episodes
+
+For TV series, the watchlist serves an important role in automatic episode monitoring:
+
+- **Prerequisite**: Series must be in your watchlist before enabling auto-episodes
+- **Linked Status**: Watchlist and monitoring are connected
+- **Removal Options**: When disabling monitoring, you can choose to keep or remove from watchlist
+
+See [Auto-Episodes](/features/auto-episodes) for details on automatic episode downloads.
+
+## Sorting and Organization
+
+Watchlist items are sorted by date added (newest first):
+
+- Recently added content appears at the top
+- Chronological order helps you track what you've recently bookmarked
+- Filter options let you focus on specific content types
+
+<Card title="Personal Library" icon="bookmark">
+Your watchlist is personal and private. Each user has their own watchlist that's not shared with other users on the system.
+</Card>
+
+## Technical Details
+
+### Database Structure
+
+Watchlist entries are polymorphic:
+
+- **User ID**: Links the watchlist item to your account
+- **Watchable Type**: Identifies if it's a movie or series
+- **Watchable ID**: References the specific content item
+- **Created At**: Timestamp of when you added it
+
+### Content Relationships
+
+The watchlist system uses polymorphic relationships:
+
+- Movies (VOD Streams) and Series both support watchlist
+- Each content type maintains its own watchlist relationship
+- Deletion of content automatically removes watchlist entries
+
+<Tip>
+Use your watchlist to keep track of series you're actively downloading episodes from, making it easy to return and check for new episodes.
+</Tip>
+
+## Bulk Management
+
+While individual additions are the primary workflow, you can:
+
+- Add multiple items one at a time while browsing
+- Remove items individually from your watchlist page
+- Filter to review specific types of content
+
+## Integration with Other Features
+
+### Download Management
+
+Watchlist integrates seamlessly with downloads:
+
+- Quick access to content you want to download
+- Track series you're actively downloading episodes from
+- Return to watchlist after starting downloads
+
+### Search Results
+
+Watchlist status appears in search results:
+
+- See which search results are already in your watchlist
+- Add new discoveries to your watchlist directly from search
+- Filter your watchlist to find specific content quickly
+
+### Discovery
+
+Use your watchlist as a discovery tool:
+
+- Bookmark content you hear about for later viewing
+- Build a queue of movies and series to watch
+- Track ongoing series as new episodes are released

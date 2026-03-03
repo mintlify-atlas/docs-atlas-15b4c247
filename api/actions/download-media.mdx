@@ -1,0 +1,343 @@
+---
+title: Download Media
+description: Actions for downloading media files through Aria2
+---
+
+## DownloadMedia
+
+Downloads a single media file using Aria2 download manager.
+
+### Signature
+
+```php
+App\Actions\DownloadMedia::run(
+    League\Uri\Uri $url,
+    array $options = []
+): string
+```
+
+### Parameters
+
+<ParamField path="url" type="League\Uri\Uri" required>
+  The download URL for the media file
+</ParamField>
+
+<ParamField path="options" type="array" default="[]">
+  Aria2 download options. Merged with default options:
+  
+  - `continue`: `true` - Resume incomplete downloads
+  - `enable-http-pipelining`: `true` - Enable HTTP pipelining
+  - `allow-overwrite`: `true` - Overwrite existing files
+  - `auto-file-renaming`: `false` - Disable automatic file renaming
+  - `retry-wait`: `0` - No wait between retries
+  - `max-tries`: `1` - Maximum retry attempts
+  - `out`: Custom output path (commonly set via CreateDownloadOut)
+</ParamField>
+
+### Returns
+
+<ResponseField name="gid" type="string">
+  The Aria2 download GID (Global Identifier) for tracking the download
+</ResponseField>
+
+### Example
+
+```php
+use App\Actions\DownloadMedia;
+use League\Uri\Uri;
+
+// Basic download
+$gid = DownloadMedia::run(
+    Uri::new('https://example.com/media/video.mp4')
+);
+
+// Download with custom output path
+$gid = DownloadMedia::run(
+    Uri::new('https://example.com/media/video.mp4'),
+    ['out' => 'movies/My Movie/My Movie.mp4']
+);
+```
+
+### Implementation Details
+
+The action sends an `AddUriRequest` to the Aria2 JSON-RPC connector:
+
+```php
+$req = new AddUriRequest(
+    [$url],
+    array_merge(
+        [
+            'continue' => true,
+            'enable-http-pipelining' => true,
+            'allow-overwrite' => true,
+            'auto-file-renaming' => false,
+            'retry-wait' => 0,
+            'max-tries' => 1,
+        ],
+        $options,
+    ),
+);
+
+$response = $this->connector->send($req)->dtoOrFail();
+return $response->getGid();
+```
+
+---
+
+## BatchDownloadMedia
+
+Downloads multiple media files in a single batch request to Aria2.
+
+### Signature
+
+```php
+App\Actions\BatchDownloadMedia::run(
+    League\Uri\Uri[] $urls,
+    ?Closure(int): array $optionsFn = null
+): Illuminate\Support\Collection
+```
+
+### Parameters
+
+<ParamField path="urls" type="array" required>
+  Array of `League\Uri\Uri` objects to download
+</ParamField>
+
+<ParamField path="optionsFn" type="Closure|null" default="null">
+  Optional closure that receives the array index and returns Aria2 options for that download.
+  
+  Signature: `function(int $key): array`
+</ParamField>
+
+### Returns
+
+<ResponseField name="results" type="Collection">
+  Collection of results. Each item is either:
+  - A GID string on success
+  - An array with `error` key containing the error message
+</ResponseField>
+
+### Example
+
+```php
+use App\Actions\BatchDownloadMedia;
+use League\Uri\Uri;
+
+// Batch download without options
+$urls = [
+    Uri::new('https://example.com/video1.mp4'),
+    Uri::new('https://example.com/video2.mp4'),
+    Uri::new('https://example.com/video3.mp4'),
+];
+
+$results = BatchDownloadMedia::run($urls);
+
+// Batch download with per-file options
+$results = BatchDownloadMedia::run(
+    $urls,
+    fn(int $index) => [
+        'out' => "movies/video{$index}.mp4"
+    ]
+);
+
+// Process results
+foreach ($results as $index => $result) {
+    if (is_array($result) && isset($result['error'])) {
+        echo "Download {$index} failed: {$result['error']}";
+    } else {
+        echo "Download {$index} started with GID: {$result}";
+    }
+}
+```
+
+### Implementation Details
+
+The action builds a batch of `AddUriRequest` calls and sends them via `JsonRpcBatchRequest`:
+
+```php
+$calls = [];
+foreach ($urls as $key => $url) {
+    $options = $optionsFn instanceof Closure ? $optionsFn($key) : [];
+    $calls[] = new AddUriRequest(
+        [$url],
+        array_merge(
+            [
+                'continue' => true,
+                'enable-http-pipelining' => true,
+                'allow-overwrite' => true,
+                'auto-file-renaming' => false,
+                'retry-wait' => 0,
+                'max-tries' => 1,
+            ],
+            $options,
+        ),
+    );
+}
+
+$req = new JsonRpcBatchRequest($calls);
+$response = $this->connector->send($req)->dtoOrFail();
+
+return $response->results()->map(function (array $response) {
+    if (isset($response['error'])) {
+        return ['error' => $response['error']['message'] ?? 'Unknown error'];
+    }
+    return $response['result'];
+});
+```
+
+---
+
+## Download Workflow
+
+The typical workflow for downloading media involves several actions working together:
+
+### 1. Create Download URL
+
+Generate the Xtream Codes download URL:
+
+```php
+use App\Actions\CreateXtreamcodesDownloadUrl;
+
+$url = CreateXtreamcodesDownloadUrl::run($episode);
+// Returns: https://provider.com/series/username/password/12345.mkv
+```
+
+### 2. Create Output Path
+
+Generate the organized output path:
+
+```php
+use App\Actions\CreateDownloadOut;
+
+$outputPath = CreateDownloadOut::run($seriesInfo, $episode);
+// Returns: shows/Breaking Bad/Season 01/Pilot.mkv
+```
+
+### 3. Start Download
+
+Initiate the download with Aria2:
+
+```php
+use App\Actions\DownloadMedia;
+
+$gid = DownloadMedia::run($url, ['out' => $outputPath]);
+```
+
+### 4. Track Download
+
+Store the download reference:
+
+```php
+use App\Models\MediaDownloadRef;
+
+$downloadRef = MediaDownloadRef::fromSeriesAndEpisode(
+    $gid,
+    $series,
+    $episode,
+    $userId
+);
+$downloadRef->saveOrFail();
+```
+
+### Complete Example
+
+```php
+use App\Actions\CreateXtreamcodesDownloadUrl;
+use App\Actions\CreateDownloadOut;
+use App\Actions\DownloadMedia;
+use App\Models\MediaDownloadRef;
+
+// Get series info and episode from Xtream API
+$seriesInfo = $connector->send(
+    new GetSeriesInfoRequest($seriesId)
+)->dtoOrFail();
+
+$episode = $seriesInfo->seasonsWithEpisodes[1][0]; // S01E01
+
+// Create download URL and output path
+$url = CreateXtreamcodesDownloadUrl::run($episode);
+$outputPath = CreateDownloadOut::run($seriesInfo, $episode);
+
+// Start download
+$gid = DownloadMedia::run($url, ['out' => $outputPath]);
+
+// Track the download
+$downloadRef = MediaDownloadRef::fromSeriesAndEpisode(
+    $gid,
+    $series,
+    $episode,
+    auth()->id()
+);
+$downloadRef->saveOrFail();
+```
+
+---
+
+## Related Jobs
+
+### MonitorDownloads
+
+Monitors active downloads and handles errors with automatic retry logic.
+
+**Queue**: Default  
+**Schedule**: Every 10 seconds  
+**Unique**: Yes (50 seconds)
+
+**Responsibilities**:
+- Persist download file paths
+- Enforce sticky pause state
+- Classify download failures
+- Schedule automatic retries (up to 5 attempts)
+
+```php
+use App\Jobs\MonitorDownloads;
+
+MonitorDownloads::dispatch();
+```
+
+### RetryDownload
+
+Retries a failed download with exponential backoff.
+
+**Queue**: Default  
+**Triggered by**: MonitorDownloads job
+
+```php
+use App\Jobs\RetryDownload;
+
+RetryDownload::dispatch($downloadRefId)
+    ->delay($retryNextAt);
+```
+
+---
+
+## Helper Actions
+
+### CreateXtreamcodesDownloadUrl
+
+Generates Xtream Codes download URLs for VOD or series episodes.
+
+**Location**: `app/Actions/CreateXtreamcodesDownloadUrl.php:16`
+
+```php
+CreateXtreamcodesDownloadUrl::run(
+    VodInformation|Episode $data
+): Uri
+```
+
+### CreateDownloadOut
+
+Generates organized output paths for downloaded media.
+
+**Location**: `app/Actions/CreateDownloadOut.php:16`
+
+```php
+CreateDownloadOut::run(
+    VodInformation|SeriesInformation $data,
+    ?Episode $episode = null
+): string
+```
+
+**Output patterns**:
+- Movies: `movies/{Movie Name}/{Movie Name}.{ext}`
+- Series: `shows/{Series Name}/Season {NN}/{Episode Title}.{ext}`

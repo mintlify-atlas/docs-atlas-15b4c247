@@ -1,0 +1,342 @@
+---
+title: Aria2 Configuration
+description: Configure aria2 download manager for Lionz IPTV Downloader
+---
+
+Lionz IPTV Downloader uses [aria2](https://aria2.github.io/) as its download manager. Aria2 is a lightweight, multi-protocol & multi-source command-line download utility.
+
+## RPC Connection
+
+The application connects to aria2 via its JSON-RPC interface. Configure the connection in your `.env` file:
+
+<ParamField path="ARIA2_RPC_HOST" type="string" default="http://localhost">
+  The host URL of the aria2 RPC server.
+  
+  **Example:** `http://localhost`, `http://192.168.1.100`
+</ParamField>
+
+<ParamField path="ARIA2_RPC_PORT" type="integer" default="6800">
+  The port number aria2 RPC is listening on. Must match `rpc-listen-port` in aria2.conf.
+</ParamField>
+
+<ParamField path="ARIA2_RPC_SECRET" type="string">
+  RPC secret token for authentication. Must match `rpc-secret` in aria2.conf.
+  
+  <Warning>
+    Set this to a secure random string to prevent unauthorized access to aria2.
+  </Warning>
+</ParamField>
+
+<ParamField path="ARIA2_DOWNLOAD_ROOT" type="string" default="storage/app/public/downloads">
+  Root directory for downloaded files. Must match the `dir` setting in aria2.conf.
+  
+  <Warning>
+    This path must be accessible to both aria2 and the web application.
+  </Warning>
+</ParamField>
+
+### Example RPC Configuration
+
+```bash .env
+ARIA2_RPC_HOST=http://localhost
+ARIA2_RPC_PORT=6800
+ARIA2_RPC_SECRET=MySecureSecretToken123
+ARIA2_DOWNLOAD_ROOT=./storage/app/public/downloads
+```
+
+## Aria2 Configuration File
+
+The `aria2.conf` file contains aria2's download and RPC settings. Default location: `./aria2.conf`
+
+### Basic Settings
+
+<ParamField path="dir" type="string" default="./storage/app/public/downloads">
+  Directory to store downloaded files.
+  
+  <Warning>
+    Must match `ARIA2_DOWNLOAD_ROOT` environment variable.
+  </Warning>
+</ParamField>
+
+<ParamField path="input-file" type="string" default="./bootstrap/cache/aria2.session">
+  Path to session file for resuming downloads after restart.
+</ParamField>
+
+<ParamField path="save-session" type="string" default="./bootstrap/cache/aria2.session">
+  Save error/unfinished downloads to this file on exit.
+</ParamField>
+
+<ParamField path="save-session-interval" type="integer" default="60">
+  Save session every N seconds. Set to 0 to save only on exit.
+</ParamField>
+
+<ParamField path="max-concurrent-downloads" type="integer" default="5">
+  Maximum number of parallel downloads.
+  
+  <Info>
+    Increase this value if you have high bandwidth and want to download multiple files simultaneously.
+  </Info>
+</ParamField>
+
+<ParamField path="continue" type="boolean" default="true">
+  Continue downloading partially downloaded files.
+</ParamField>
+
+<ParamField path="max-overall-download-limit" type="string" default="0">
+  Maximum overall download speed in bytes/sec. `0` means unrestricted.
+  
+  **Example:** `1M` (1 MB/s), `512K` (512 KB/s)
+</ParamField>
+
+<ParamField path="max-download-limit" type="string" default="0">
+  Maximum download speed per download in bytes/sec. `0` means unrestricted.
+</ParamField>
+
+<ParamField path="quiet" type="boolean" default="false">
+  Suppress console output from aria2.
+</ParamField>
+
+### Advanced Settings
+
+<ParamField path="allow-overwrite" type="boolean" default="true">
+  Restart download from scratch if control file doesn't exist.
+</ParamField>
+
+<ParamField path="allow-piece-length-change" type="boolean" default="true">
+  Allow downloads to proceed even if piece length differs from control file.
+</ParamField>
+
+<ParamField path="always-resume" type="boolean" default="true">
+  Always try to resume downloads. Abort if resume is not possible.
+</ParamField>
+
+<ParamField path="async-dns" type="boolean" default="false">
+  Enable asynchronous DNS resolution.
+</ParamField>
+
+<ParamField path="auto-file-renaming" type="boolean" default="true">
+  Automatically rename files if the same filename exists.
+</ParamField>
+
+<ParamField path="content-disposition-default-utf8" type="boolean" default="true">
+  Handle Content-Disposition header as UTF-8 instead of ISO-8859-1.
+</ParamField>
+
+<ParamField path="disk-cache" type="string" default="64M">
+  Disk cache size. Data is cached in memory up to this size.
+  
+  **Example:** `16M`, `64M`, `128M`
+  
+  <Info>
+    Larger cache can improve performance but uses more memory.
+  </Info>
+</ParamField>
+
+<ParamField path="file-allocation" type="string" default="falloc">
+  File allocation method.
+  
+  **Options:**
+  - `none` - No pre-allocation
+  - `prealloc` - Pre-allocate before download (slow)
+  - `falloc` - Fast allocation (recommended for ext4, btrfs, xfs, NTFS)
+  - `trunc` - Use ftruncate() system call
+</ParamField>
+
+<ParamField path="no-file-allocation-limit" type="string" default="8M">
+  Don't allocate space for files smaller than this size.
+</ParamField>
+
+### RPC Settings
+
+<ParamField path="enable-rpc" type="boolean" default="true" required>
+  Enable JSON-RPC/XML-RPC server.
+  
+  <Warning>
+    This must be `true` for the application to communicate with aria2.
+  </Warning>
+</ParamField>
+
+<ParamField path="rpc-allow-origin-all" type="boolean" default="true">
+  Add Access-Control-Allow-Origin header with value `*` to RPC responses.
+</ParamField>
+
+<ParamField path="rpc-listen-all" type="boolean" default="true">
+  Listen on all network interfaces. Set to `false` to listen only on localhost.
+  
+  <Warning>
+    Set to `false` and use `rpc-secret` if aria2 is accessible from the internet.
+  </Warning>
+</ParamField>
+
+<ParamField path="rpc-listen-port" type="integer" default="6800">
+  Port for JSON-RPC/XML-RPC server. Must match `ARIA2_RPC_PORT` in .env.
+  
+  **Range:** 1024-65535
+</ParamField>
+
+<ParamField path="rpc-secret" type="string">
+  RPC secret authorization token. Must match `ARIA2_RPC_SECRET` in .env.
+  
+  <Warning>
+    Required for secure RPC access. Use a strong random string.
+  </Warning>
+</ParamField>
+
+<ParamField path="rpc-secure" type="boolean" default="false">
+  Enable SSL/TLS encryption for RPC. Requires `rpc-certificate` and `rpc-private-key`.
+</ParamField>
+
+### HTTP/FTP Settings
+
+<ParamField path="max-connection-per-server" type="integer" default="16">
+  Maximum connections to a single server per download.
+  
+  <Info>
+    Higher values can increase download speed but may be throttled by some servers.
+  </Info>
+</ParamField>
+
+<ParamField path="min-split-size" type="string" default="8M">
+  Minimum size to split downloads into chunks.
+  
+  **Range:** `1M` - `1024M`
+</ParamField>
+
+<ParamField path="split" type="integer" default="32">
+  Download files using N connections. Limited by `max-connection-per-server`.
+</ParamField>
+
+<ParamField path="user-agent" type="string" default="Transmission/2.77">
+  User agent string for HTTP(S) downloads.
+  
+  <Info>
+    Set to mimic a BitTorrent client to avoid throttling from some sources.
+  </Info>
+</ParamField>
+
+### BitTorrent Settings
+
+<ParamField path="listen-port" type="string" default="50101-50109">
+  TCP port range for BitTorrent downloads.
+  
+  **Example:** `6881-6999`, `50101-50109`
+</ParamField>
+
+<ParamField path="seed-ratio" type="float" default="0.1">
+  Seed completed torrents until this share ratio is reached. `0.0` means unlimited.
+</ParamField>
+
+<ParamField path="seed-time" type="integer" default="0">
+  Seeding time in minutes. `0` disables seeding after download.
+</ParamField>
+
+<ParamField path="enable-dht" type="boolean" default="true">
+  Enable IPv4 DHT functionality and UDP tracker support.
+</ParamField>
+
+<ParamField path="enable-dht6" type="boolean" default="true">
+  Enable IPv6 DHT functionality.
+</ParamField>
+
+<ParamField path="dht-listen-port" type="string" default="50101-50109">
+  UDP port range for DHT and UDP tracker.
+</ParamField>
+
+<ParamField path="dht-entry-point" type="string" default="dht.transmissionbt.com:6881">
+  Entry point to IPv4 DHT network.
+</ParamField>
+
+<ParamField path="dht-entry-point6" type="string" default="dht.transmissionbt.com:6881">
+  Entry point to IPv6 DHT network.
+</ParamField>
+
+<ParamField path="enable-peer-exchange" type="boolean" default="true">
+  Enable Peer Exchange (PEX) extension.
+</ParamField>
+
+<ParamField path="peer-id-prefix" type="string" default="-TR2770-">
+  Prefix for peer ID. Mimics Transmission 2.77.
+</ParamField>
+
+<ParamField path="peer-agent" type="string" default="Transmission/2.77">
+  Client version string for BitTorrent extended handshake.
+</ParamField>
+
+<ParamField path="bt-tracker" type="string">
+  Comma-separated list of additional BitTorrent tracker announce URIs.
+  
+  <Info>
+    The default configuration includes a comprehensive list of public trackers for better peer discovery.
+  </Info>
+</ParamField>
+
+## Starting Aria2
+
+Start aria2 with the configuration file:
+
+```bash
+aria2c --conf-path=aria2.conf
+```
+
+Or start as a daemon:
+
+```bash
+aria2c --conf-path=aria2.conf -D
+```
+
+## Example Configuration
+
+```ini aria2.conf
+# Basic Settings
+dir=./storage/app/public/downloads
+input-file=./bootstrap/cache/aria2.session
+save-session=./bootstrap/cache/aria2.session
+save-session-interval=60
+max-concurrent-downloads=5
+continue=true
+
+# Advanced Settings
+allow-overwrite=true
+auto-file-renaming=true
+disk-cache=64M
+file-allocation=falloc
+
+# RPC Settings
+enable-rpc=true
+rpc-allow-origin-all=true
+rpc-listen-all=true
+rpc-listen-port=6800
+rpc-secret=MySecureSecretToken123
+
+# HTTP/FTP Settings
+max-connection-per-server=16
+min-split-size=8M
+split=32
+user-agent=Transmission/2.77
+
+# BitTorrent Settings
+listen-port=50101-50109
+seed-ratio=0.1
+seed-time=0
+enable-dht=true
+enable-peer-exchange=true
+peer-id-prefix=-TR2770-
+peer-agent=Transmission/2.77
+```
+
+## Verifying Connection
+
+After starting aria2, verify the RPC connection:
+
+```bash
+curl http://localhost:6800/jsonrpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "test",
+    "method": "aria2.getVersion",
+    "params": ["token:MySecureSecretToken123"]
+  }'
+```
+
+You should receive a JSON response with aria2 version information.

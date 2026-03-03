@@ -1,0 +1,204 @@
+---
+title: Watchlist Model
+description: Watchlist model structure for managing user watchlists with polymorphic relationships
+---
+
+## Overview
+
+The `Watchlist` model manages user watchlists for both VOD streams and series. It uses a polymorphic relationship to support multiple media types in a single table.
+
+**Model Path:** `app/Models/Watchlist.php`  
+**Table:** `watchlists`
+
+## Database Schema
+
+<ResponseField name="id" type="integer" required>
+  Auto-incrementing primary key
+</ResponseField>
+
+<ResponseField name="user_id" type="integer" required>
+  Foreign key to users table (cascade on delete)
+</ResponseField>
+
+<ResponseField name="watchable_id" type="integer" required>
+  Polymorphic foreign key to the watchable item (Series or VodStream)
+</ResponseField>
+
+<ResponseField name="watchable_type" type="string" required>
+  Polymorphic type (e.g., 'App\\Models\\Series' or 'App\\Models\\VodStream')
+</ResponseField>
+
+<ResponseField name="created_at" type="timestamp">
+  Record creation timestamp
+</ResponseField>
+
+<ResponseField name="updated_at" type="timestamp">
+  Record last update timestamp
+</ResponseField>
+
+## Fillable Attributes
+
+```php
+[
+    'user_id',
+    'watchable_id',
+    'watchable_type',
+]
+```
+
+## Constraints
+
+### Unique Constraint
+
+The table has a unique composite index to prevent duplicate watchlist entries:
+
+```php
+['user_id', 'watchable_id', 'watchable_type']
+```
+
+This ensures a user cannot add the same item to their watchlist multiple times.
+
+### Foreign Key Constraint
+
+- `user_id` → `users.id` (cascade on delete)
+- When a user is deleted, all their watchlist entries are automatically removed
+
+## Relationships
+
+### User
+
+Belongs to a User:
+
+```php
+public function user(): BelongsTo
+```
+
+**Usage:**
+```php
+$watchlistItem = Watchlist::find(1);
+$user = $watchlistItem->user;
+```
+
+### Watchable (Polymorphic)
+
+Polymorphic relationship to either VodStream or Series:
+
+```php
+public function watchable(): MorphTo
+```
+
+**Usage:**
+```php
+$watchlistItem = Watchlist::find(1);
+$media = $watchlistItem->watchable; // Returns VodStream or Series
+
+if ($media instanceof VodStream) {
+    // Handle VOD
+} elseif ($media instanceof Series) {
+    // Handle series
+}
+```
+
+## Common Operations
+
+### Add to Watchlist
+
+```php
+// Add a VOD stream to watchlist
+Watchlist::create([
+    'user_id' => auth()->id(),
+    'watchable_id' => $vodStream->stream_id,
+    'watchable_type' => VodStream::class,
+]);
+
+// Add a series to watchlist
+Watchlist::create([
+    'user_id' => auth()->id(),
+    'watchable_id' => $series->series_id,
+    'watchable_type' => Series::class,
+]);
+```
+
+### Using Polymorphic Helper
+
+```php
+// Add using relationship
+$user->watchlists()->create([
+    'watchable_id' => $vodStream->stream_id,
+    'watchable_type' => VodStream::class,
+]);
+
+// Or from the media model
+$vodStream->watchlists()->create([
+    'user_id' => auth()->id(),
+]);
+```
+
+### Get User's Watchlist
+
+```php
+// Get all watchlist items for a user
+$watchlist = Watchlist::where('user_id', auth()->id())->get();
+
+// With eager loading
+$watchlist = Watchlist::with('watchable')
+    ->where('user_id', auth()->id())
+    ->get();
+
+// Group by type
+$vodWatchlist = Watchlist::where('user_id', auth()->id())
+    ->where('watchable_type', VodStream::class)
+    ->get();
+
+$seriesWatchlist = Watchlist::where('user_id', auth()->id())
+    ->where('watchable_type', Series::class)
+    ->get();
+```
+
+### Check if Item is in Watchlist
+
+```php
+$isInWatchlist = Watchlist::where('user_id', auth()->id())
+    ->where('watchable_id', $vodStream->stream_id)
+    ->where('watchable_type', VodStream::class)
+    ->exists();
+```
+
+### Remove from Watchlist
+
+```php
+Watchlist::where('user_id', auth()->id())
+    ->where('watchable_id', $vodStream->stream_id)
+    ->where('watchable_type', VodStream::class)
+    ->delete();
+```
+
+## Error Handling
+
+### Duplicate Entry
+
+Attempting to add a duplicate item will throw a unique constraint violation:
+
+```php
+try {
+    Watchlist::create([
+        'user_id' => auth()->id(),
+        'watchable_id' => $vodStream->stream_id,
+        'watchable_type' => VodStream::class,
+    ]);
+} catch (\Illuminate\Database\QueryException $e) {
+    if ($e->getCode() === '23000') {
+        // Duplicate entry - item already in watchlist
+    }
+}
+```
+
+Alternatively, use `firstOrCreate`:
+
+```php
+$watchlistItem = Watchlist::firstOrCreate([
+    'user_id' => auth()->id(),
+    'watchable_id' => $vodStream->stream_id,
+    'watchable_type' => VodStream::class,
+]);
+```

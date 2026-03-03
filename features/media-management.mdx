@@ -1,0 +1,126 @@
+---
+title: Media Management
+description: Browse, discover, and manage your VOD movies and TV series collection
+---
+
+Lionz IPTV Downloader provides powerful media management capabilities for both movies (VOD streams) and TV series. Browse through your content library, filter by categories, and access detailed information about each title.
+
+## Browsing Movies
+
+The Movies section displays all available VOD (Video on Demand) content from your IPTV provider.
+
+### Accessing the Movies Library
+
+1. Navigate to the **Movies** section from the main menu
+2. Browse the paginated list of available movies (20 per page)
+3. Use category filters to narrow down your selection
+
+### Category Filtering
+
+Movies are organized into categories provided by your IPTV service:
+
+- Select a category from the sidebar to filter movies
+- View uncategorized content using the special "Uncategorized" category
+- Clear filters to see all available movies
+
+<Info>
+Categories are synced from your IPTV provider and displayed in the sidebar for easy navigation.
+</Info>
+
+### Movie Details
+
+Click on any movie to view comprehensive information:
+
+- **Title and Rating**: Movie name with 5-star rating display
+- **Cover Art**: High-quality poster image
+- **Metadata**: Release date, genre, director, and cast information
+- **Plot Summary**: Detailed description of the movie
+- **Stream Information**: Container format and technical details
+- **Actions**: Download, add to watchlist, or generate direct download links
+
+## Browsing TV Series
+
+The Series section provides access to all TV shows available through your IPTV provider.
+
+### Accessing the Series Library
+
+1. Navigate to the **Series** section from the main menu
+2. Browse the paginated list of TV series (20 per page)
+3. Filter by category to find specific types of content
+
+### Series Details
+
+Click on any series to view detailed information:
+
+- **Series Overview**: Cover art, title, plot, and ratings
+- **Season & Episode List**: Complete breakdown of all available seasons
+- **Episode Information**: Individual episode titles, air dates, and details
+- **Metadata**: Cast, director, genre, and release information
+- **Monitoring Status**: Auto-episode download configuration (if enabled)
+
+<Card title="Episode Selection" icon="list">
+Each season displays all available episodes with their episode numbers, titles, and metadata. Select individual episodes or multiple episodes for batch operations.
+</Card>
+
+## Content Sorting
+
+Both movies and series are sorted by recency:
+
+- **Movies**: Sorted by date added (newest first)
+- **Series**: Sorted by last modified date (newest first)
+
+## Pagination
+
+Content is paginated for optimal performance:
+
+- 20 items displayed per page
+- Cursor-based pagination maintains consistent position
+- Query strings preserve filters and page state
+
+<Tip>
+Use the "as_of" parameter in URLs to maintain stable pagination positions even as new content is added to your library.
+</Tip>
+
+## Watchlist Integration
+
+While browsing media, you can quickly identify content in your watchlist:
+
+- Watchlist status indicator appears on each item
+- Add or remove content from your watchlist with one click
+- See [Watchlist](/features/watchlist) for more details
+
+## Cache Management
+
+Media information is cached to improve performance:
+
+- Cached data includes episode lists, metadata, and details
+- Clear cache to refresh information from your IPTV provider
+- Cache is automatically invalidated when provider data changes
+
+<Steps>
+  <Step title="Navigate to Content">
+    Access Movies or Series from the main navigation menu
+  </Step>
+  <Step title="Filter by Category">
+    Select a category from the sidebar to narrow your browse results
+  </Step>
+  <Step title="View Details">
+    Click any title to see comprehensive information, episodes, and available actions
+  </Step>
+  <Step title="Take Action">
+    Download content, add to watchlist, or set up automatic episode monitoring
+  </Step>
+</Steps>
+
+## Category System
+
+Categories are managed automatically:
+
+- Synced from your IPTV provider's category structure
+- Separate categories for VOD and Series content
+- System-managed "Uncategorized" category for items without assignments
+- Categories display only when they contain content
+
+<Note>
+If a category is removed by your provider, content may be moved to the Uncategorized section until the next sync.
+</Note>

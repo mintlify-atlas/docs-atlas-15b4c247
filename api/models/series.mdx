@@ -1,0 +1,162 @@
+---
+title: Series Model
+description: Series model schema, relationships, and methods for managing TV series data
+---
+
+## Overview
+
+The `Series` model represents TV series in the application. It uses Laravel Scout for full-text search and integrates with Spatie Laravel Data for type-safe DTOs.
+
+**Model Path:** `app/Models/Series.php`  
+**Table:** `series`  
+**Primary Key:** `series_id` (non-incrementing)
+
+## Database Schema
+
+<ResponseField name="series_id" type="integer" required>
+  Primary key for the series
+</ResponseField>
+
+<ResponseField name="num" type="integer" required>
+  Unique series number
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Name of the series
+</ResponseField>
+
+<ResponseField name="cover" type="string">
+  URL to the series cover image
+</ResponseField>
+
+<ResponseField name="plot" type="text">
+  Series plot/description
+</ResponseField>
+
+<ResponseField name="cast" type="text">
+  Cast members of the series
+</ResponseField>
+
+<ResponseField name="director" type="string">
+  Director of the series
+</ResponseField>
+
+<ResponseField name="genre" type="string">
+  Genre classification
+</ResponseField>
+
+<ResponseField name="releaseDate" type="string">
+  Release date of the series
+</ResponseField>
+
+<ResponseField name="last_modified" type="datetime">
+  Last modification timestamp (immutable)
+</ResponseField>
+
+<ResponseField name="rating" type="string">
+  Rating value
+</ResponseField>
+
+<ResponseField name="rating_5based" type="decimal">
+  Rating on a 5-point scale (precision: 3,1)
+</ResponseField>
+
+<ResponseField name="backdrop_path" type="array">
+  JSON array of backdrop image paths
+</ResponseField>
+
+<ResponseField name="youtube_trailer" type="string">
+  YouTube trailer URL or ID
+</ResponseField>
+
+<ResponseField name="episode_run_time" type="string">
+  Episode runtime information
+</ResponseField>
+
+<ResponseField name="category_id" type="string">
+  Category identifier
+</ResponseField>
+
+<ResponseField name="created_at" type="timestamp">
+  Record creation timestamp
+</ResponseField>
+
+<ResponseField name="updated_at" type="timestamp">
+  Record last update timestamp
+</ResponseField>
+
+## Fillable Attributes
+
+All fields are mass assignable via the fillable array:
+
+```php
+[
+    'name',
+    'series_id',
+    'cover',
+    'plot',
+    'cast',
+    'director',
+    'genre',
+    'releaseDate',
+    'last_modified',
+    'rating',
+    'rating_5based',
+    'backdrop_path',
+    'youtube_trailer',
+    'episode_run_time',
+    'category_id',
+]
+```
+
+## Type Casts
+
+The model casts the following attributes:
+
+- `series_id` → `integer`
+- `rating_5based` → `decimal:1`
+- `backdrop_path` → `AsArrayObject`
+- `last_modified` → `immutable_datetime`
+
+## Relationships
+
+### Watchlists
+
+Polymorphic one-to-many relationship with the Watchlist model.
+
+```php
+public function watchlists(): MorphMany
+```
+
+Returns all watchlist entries for this series.
+
+**Usage:**
+```php
+$series = Series::find(1);
+$watchlists = $series->watchlists;
+```
+
+## Search
+
+The Series model uses Laravel Scout for full-text search. The following fields are indexed:
+
+- `name`
+- `plot`
+- `cast`
+- `director`
+- `genre`
+
+**Example:**
+```php
+$results = Series::search('Breaking Bad')->get();
+```
+
+## Data Transfer Object
+
+The model integrates with `SeriesData` DTO class via the `WithData` trait:
+
+```php
+protected $dataClass = SeriesData::class;
+```
+
+This enables type-safe data transfer and validation.

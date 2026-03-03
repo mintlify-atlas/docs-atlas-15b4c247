@@ -1,0 +1,444 @@
+---
+title: Watchlist
+description: User watchlist management endpoints for movies and series
+---
+
+The Watchlist API allows users to manage their personal collection of movies and series they want to watch, providing centralized access to saved content.
+
+## List Watchlist Items
+
+Display all items in the current user's watchlist with optional filtering by media type.
+
+```
+GET /watchlist
+```
+
+**Route Name:** `watchlist`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `WatchlistController::index` (app/Http/Controllers/WatchlistController.php:27)
+
+### Query Parameters
+
+<ParamField query="filter" type="string">
+  Filter watchlist by media type
+  - `all` - Show both movies and series (default)
+  - `movies` - Show only movies
+  - `series` - Show only series
+  - Case-insensitive
+</ParamField>
+
+### Response
+
+Returns Inertia response rendering `watchlist` component.
+
+**Props:**
+
+<ResponseField name="items" type="array">
+  Collection of watchlist items
+  - Ordered by creation date (latest first)
+  - Each item includes:
+    - `id` - Watchlist entry ID
+    - `type` - Media type ("movie" or "series")
+    - `watchableId` - Media ID (stream_id or series_id)
+    - `name` - Media title
+    - `cover` - Cover/poster image URL
+    - `addedAt` - Human-readable timestamp (e.g., "2 days ago")
+</ResponseField>
+
+<ResponseField name="filter" type="string">
+  Current active filter
+  - Returns the applied filter value
+</ResponseField>
+
+### Watchlist Item Structure
+
+**Movie Items:**
+```json
+{
+  "id": 123,
+  "type": "movie",
+  "watchableId": 45678,
+  "name": "Example Movie",
+  "cover": "https://example.com/poster.jpg",
+  "addedAt": "3 hours ago"
+}
+```
+
+**Series Items:**
+```json
+{
+  "id": 124,
+  "type": "series",
+  "watchableId": 89012,
+  "name": "Example Series",
+  "cover": "https://example.com/cover.jpg",
+  "addedAt": "1 day ago"
+}
+```
+
+**Controller Reference:** WatchlistController.php:46-59
+
+### Filter Logic
+
+Filtering is applied at the database query level:
+
+```php
+// Movies only
+if ($filter === 'movies') {
+    $query->where('watchable_type', VodStream::class);
+}
+
+// Series only
+elseif ($filter === 'series') {
+    $query->where('watchable_type', Series::class);
+}
+```
+
+**Controller Reference:** WatchlistController.php:36-40
+
+### Example
+
+```bash
+# Get all watchlist items
+GET /watchlist
+
+# Get only movies
+GET /watchlist?filter=movies
+
+# Get only series
+GET /watchlist?filter=series
+```
+
+---
+
+## Add to Watchlist
+
+Add a movie or series to the current user's watchlist.
+
+```
+POST /watchlist
+```
+
+**Route Name:** `watchlist.store`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `WatchlistController::store` (app/Http/Controllers/WatchlistController.php:70)
+
+### Request Body
+
+<ParamField body="type" type="string" required>
+  Media type to add
+  - `movie` - Add a movie
+  - `series` - Add a series
+  - Case-insensitive
+  - Validated via `StoreWatchlistRequest`
+</ParamField>
+
+<ParamField body="id" type="integer" required>
+  Media ID
+  - For movies: stream_id from VodStream
+  - For series: series_id from Series
+  - Must be valid integer
+</ParamField>
+
+### Response
+
+Redirects to watchlist page.
+
+**Success:**
+- Silently adds item to watchlist
+- Redirects to `watchlist` route
+
+**Failure:**
+```php
+return to_route('watchlist')->withErrors('Failed to add the item to the watchlist');
+```
+
+### Model Type Resolution
+
+The controller maps request type to Laravel model:
+
+```php
+$modelType = $type === 'movie' ? VodStream::class : Series::class;
+```
+
+**Controller Reference:** WatchlistController.php:76
+
+### Duplicate Prevention
+
+The `AddToWatchlist` action handles duplicate checking:
+- Returns `false` if item already in watchlist
+- Returns `true` if successfully added
+
+**Controller Reference:** WatchlistController.php:78-82
+
+### Example
+
+```bash
+# Add movie to watchlist
+POST /watchlist
+Content-Type: application/json
+
+{"type": "movie", "id": 12345}
+
+# Add series to watchlist
+POST /watchlist
+Content-Type: application/json
+
+{"type": "series", "id": 67890}
+```
+
+---
+
+## Remove from Watchlist
+
+Remove an item from the current user's watchlist.
+
+```
+DELETE /watchlist/{id}
+```
+
+**Route Name:** `watchlist.destroy`
+
+**Middleware:** `auth`, `verified`
+
+**Controller:** `WatchlistController::destroy` (app/Http/Controllers/WatchlistController.php:91)
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Watchlist entry ID
+  - Must be numeric (validated with `whereNumber`)
+  - Must exist in user's watchlist
+</ParamField>
+
+### Response
+
+Redirects to watchlist page.
+
+**Success:**
+```php
+return to_route('watchlist')->with('message', 'Item removed from your watchlist');
+```
+
+**Failure:**
+```php
+return to_route('watchlist')->withErrors('Watchlist item does not exist');
+```
+
+### Security
+
+The query uses `firstOrFail()` which ensures:
+- Only authenticated user's watchlist items can be deleted
+- Throws `ModelNotFoundException` if ID is invalid or belongs to another user
+
+**Controller Reference:** WatchlistController.php:94-97
+
+### Example
+
+```bash
+DELETE /watchlist/123
+```
+
+---
+
+## Alternative Watchlist Endpoints
+
+In addition to the main watchlist controller, media-specific endpoints exist for quick add/remove operations:
+
+### Movie-Specific Endpoints
+
+**Add Movie:**
+```
+POST /movies/{model}/watchlist
+```
+
+**Remove Movie:**
+```
+DELETE /movies/{model}/watchlist
+```
+
+**Controller:** VodStreamWatchlistController (app/Http/Controllers/VodStream/VodStreamWatchlistController.php)
+
+**Routes:** routes/web.php:39-42
+
+See [Movies API - Watchlist](/api/movies#add-to-watchlist) for details.
+
+### Series-Specific Endpoints
+
+**Add Series:**
+```
+POST /series/{model}/watchlist
+```
+
+**Remove Series:**
+```
+DELETE /series/{model}/watchlist
+```
+
+**Controller:** SeriesWatchlistController (app/Http/Controllers/Series/SeriesWatchlistController.php)
+
+**Routes:** routes/web.php:59-62
+
+See [Series API - Watchlist](/api/series#add-series-to-watchlist) for details.
+
+---
+
+## Watchlist Model
+
+Watchlist items are stored in the `Watchlist` model:
+
+**Key Fields:**
+- `id` - Primary key
+- `user_id` - Owner user ID
+- `watchable_type` - Polymorphic type (VodStream::class or Series::class)
+- `watchable_id` - Media ID (stream_id or series_id)
+- `created_at` - When item was added
+- `updated_at` - Last modification
+
+**Relationships:**
+
+```php
+// Polymorphic relationship to media
+public function watchable(): MorphTo
+{
+    return $this->morphTo();
+}
+
+// Belongs to user
+public function user(): BelongsTo
+{
+    return $this->belongsTo(User::class);
+}
+```
+
+**Inverse Relationships:**
+
+```php
+// On VodStream model
+public function watchlists(): MorphMany
+{
+    return $this->morphMany(Watchlist::class, 'watchable');
+}
+
+// On Series model
+public function watchlists(): MorphMany
+{
+    return $this->morphMany(Watchlist::class, 'watchable');
+}
+```
+
+---
+
+## Watchlist Checking
+
+Controllers use the `inMyWatchlist` helper method on the User model:
+
+```php
+$inWatchlist = $user->inMyWatchlist($streamId, VodStream::class);
+```
+
+**Returns:** Boolean indicating if item is in user's watchlist
+
+**Usage Examples:**
+- VodStreamController.php:137
+- SeriesController.php:156
+
+### Watchlist Existence Query
+
+List queries include `in_watchlist` flag using `withExists`:
+
+```php
+->withExists(['watchlists as in_watchlist' => function ($query) use ($user): void {
+    $query->where('user_id', $user->id);
+}])
+```
+
+**Usage Examples:**
+- VodStreamController.php:45-47
+- SeriesController.php:41-43
+
+---
+
+## Shared Watchlist Actions
+
+Two actions handle watchlist operations across the application:
+
+### AddToWatchlist Action
+
+```php
+AddToWatchlist::run(
+    User $user,
+    int $mediaId,
+    string $modelType // VodStream::class or Series::class
+): bool
+```
+
+**Returns:**
+- `true` - Successfully added
+- `false` - Already exists or error
+
+**Used By:**
+- WatchlistController.php:78
+- VodStreamWatchlistController.php:22
+- SeriesWatchlistController.php:22
+
+### RemoveFromWatchlist Action
+
+```php
+RemoveFromWatchlist::run(
+    User $user,
+    int $mediaId,
+    string $modelType // VodStream::class or Series::class
+): bool
+```
+
+**Returns:**
+- `true` - Successfully removed
+- `false` - Not found or error
+
+**Used By:**
+- VodStreamWatchlistController.php:35
+- SeriesWatchlistController.php:35
+
+---
+
+## User Scope
+
+All watchlist operations are scoped to the authenticated user:
+
+**Listing:**
+```php
+$user->watchlists()->with('watchable')
+```
+
+**Adding:**
+```php
+AddToWatchlist::run($user, $mediaId, $modelType)
+```
+
+**Removing:**
+```php
+Watchlist::query()->where('id', $id)->firstOrFail()->delete()
+```
+
+**Users cannot access other users' watchlists.**
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Movies API" icon="film" href="/api/movies">
+    Learn about movie-specific watchlist endpoints
+  </Card>
+  <Card title="Series API" icon="tv" href="/api/series">
+    Learn about series-specific watchlist endpoints
+  </Card>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Understand user authentication and scoping
+  </Card>
+</CardGroup>
