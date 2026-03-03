@@ -1,0 +1,119 @@
+{
+  "projectType": "saas",
+  "projectName": "Lionz IPTV Downloader",
+  "projectDescription": "A modern, high-performance IPTV content manager built with Laravel that integrates with Lionz IPTV service",
+  "theme": "palm",
+  "primaryColor": "#8b5cf6",
+  "lightColor": "#a78bfa",
+  "darkColor": "#7c3aed",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/media-management",
+              "features/downloads",
+              "features/watchlist",
+              "features/search",
+              "features/auto-episodes"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/environment",
+              "config/aria2",
+              "config/meilisearch",
+              "config/xtream-codes"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/production",
+              "deployment/troubleshooting"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/architecture",
+              "development/contributing",
+              "development/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/movies",
+              "api/series",
+              "api/downloads",
+              "api/watchlist"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/series",
+              "api/models/vod-stream",
+              "api/models/media-download",
+              "api/models/watchlist"
+            ]
+          },
+          {
+            "group": "Actions",
+            "pages": [
+              "api/actions/download-media",
+              "api/actions/sync-media",
+              "api/actions/auto-episodes"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "IPTV content management for VODs and Series",
+    "Download management with aria2 integration",
+    "Fast content search with MeiliSearch",
+    "Watchlist and favorites tracking",
+    "Automatic episode monitoring and downloads",
+    "Multi-user access control",
+    "Real-time download monitoring",
+    "Xtream Codes API integration"
+  ],
+  "publicApiSurface": [
+    "GET /movies - Browse movies",
+    "GET /movies/{id} - View movie details",
+    "GET /movies/{id}/download - Download movie",
+    "GET /series - Browse series",
+    "GET /series/{id} - View series details",
+    "POST /series/{id}/download - Batch download episodes",
+    "GET /downloads - View downloads",
+    "GET /watchlist - View watchlist",
+    "POST /search - Search content",
+    "SyncMedia - Sync content from Xtream Codes",
+    "DownloadMedia - Queue media for download",
+    "ScanSeriesForNewEpisodes - Auto-download new episodes"
+  ]
+}
